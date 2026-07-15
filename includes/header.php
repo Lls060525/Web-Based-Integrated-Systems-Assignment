@@ -45,11 +45,10 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
             <?php if (!isset($is_auth_page) || !$is_auth_page): ?>
 
                 <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
-
                     <a href="/">Home</a>
                     <a href="/admin/members.php">Members</a>
                     <a href="/admin/products.php">Products</a>
-                    <a href="/member/profile.php">Profile</a>
+                    <a href="/admin/orders.php">Orders</a> <a href="/member/profile.php">Profile</a>
                     <a href="/auth/logout.php" class="logout-link">Log Out</a>
 
                 <?php elseif (isset($_SESSION['role']) && $_SESSION['role'] === 'member'): ?>
