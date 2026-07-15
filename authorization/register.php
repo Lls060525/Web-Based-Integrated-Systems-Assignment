@@ -1,6 +1,7 @@
 <?php
 session_start();
 $title = 'Register - Mobile2U';
+$is_auth_page = true;
 include __DIR__ . '/../includes/header.php';
 
 $errors = [];

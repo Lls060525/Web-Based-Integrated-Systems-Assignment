@@ -1,13 +1,18 @@
 <?php
 session_start();
 
+header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+header("Cache-Control: post-check=0, pre-check=0", false);
+header("Pragma: no-cache");
+
 // If user is already logged in, push them to the dashboard
 if (isset($_SESSION['user_id'])) {
-    header('Location: /dashboard/home.php');
+    header('Location: /member/home.php');
     exit;
 }
 
 $title = 'Login - Mobile2U';
+$is_auth_page = true;
 include __DIR__ . '/../includes/header.php';
 
 $errors = [];
@@ -85,7 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                    <input type="password" id="password" name="password" placeholder="Enter your password" required autocomplete="off">
                 </div>
 
                 <button type="submit" class="btn-primary">Log In</button>

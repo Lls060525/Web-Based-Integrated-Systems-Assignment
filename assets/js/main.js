@@ -122,3 +122,10 @@ $(function(){
       }, 300); // 300ms 防抖时间
   });
 });
+
+window.addEventListener('pageshow', function(event) {
+    if (event.persisted) {
+        // Force a hard reload from the server
+        window.location.reload();
+    }
+});
