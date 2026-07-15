@@ -229,6 +229,8 @@ body {
   cursor: pointer;
   font-weight: 600;
   transition: background 0.2s;
+  text-decoration: none;
+  display: inline-block;
 }
 .btn-primary:hover { background: var(--primary-hover); }
 
@@ -241,6 +243,7 @@ body {
   cursor: pointer;
   display: inline-block;
   font-size: 14px;
+  text-decoration: none;
 }
 .btn-outline:hover { background: #f9f9f9; }
 
