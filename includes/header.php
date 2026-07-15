@@ -48,7 +48,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
 
                     <a href="/">Home</a>
                     <a href="/admin/members.php">Members</a>
-                    <a href="/products.php">Products</a>
+                    <a href="/admin/products.php">Products</a>
                     <a href="/member/profile.php">Profile</a>
                     <a href="/auth/logout.php" class="logout-link">Log Out</a>
 

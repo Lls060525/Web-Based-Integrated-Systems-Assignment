@@ -135,7 +135,7 @@ $(function(){
           $tbody.html('<tr><td colspan="6" class="text-center" style="padding: 20px; color: var(--text-muted);">Searching...</td></tr>');
 
           $.ajax({
-              url: '/admin/members.php',
+              url: window.location.pathname,
               type: 'GET',
               data: { q: query }, // 发送搜索关键词
               success: function(response) {
