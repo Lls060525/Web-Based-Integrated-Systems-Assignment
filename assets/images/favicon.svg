@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+    <rect width="120" height="120" rx="28" fill="#ee4d2d" />
+    
+    <text x="50%" y="54%" 
+          font-family="Arial, Impact, sans-serif" 
+          font-weight="900" 
+          font-size="85" 
+          fill="#ffffff" 
+          text-anchor="middle" 
+          dominant-baseline="central"
+          letter-spacing="-2">
+        M
+    </text>
+</svg>

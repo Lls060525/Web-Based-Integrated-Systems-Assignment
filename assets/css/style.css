@@ -597,3 +597,41 @@ body {
   background: var(--primary);
   color: var(--white) !important;
 }
+
+/* --- Shopping Cart Specific Layout --- */
+.cart-layout {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+}
+
+.cart-items-section {
+  flex: 1; /* 左侧商品列表占满剩余空间 */
+}
+
+.cart-summary-section {
+  width: 320px; /* 右侧结算板固定宽度 */
+  position: sticky;
+  top: 100px; /* 滚动时随视口吸顶悬浮 */
+}
+
+.qty-input {
+  width: 60px;
+  padding: 6px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  outline: none;
+}
+.qty-input:focus {
+  border-color: var(--primary);
+}
+
+.cart-table th, .cart-table td {
+  vertical-align: middle; /* 确保商品图片和文字垂直居中对齐 */
+}
+
+@media(max-width: 850px) {
+  .cart-layout { flex-direction: column; }
+  .cart-summary-section { width: 100%; position: static; }
+}

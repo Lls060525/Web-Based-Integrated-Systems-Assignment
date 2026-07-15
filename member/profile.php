@@ -3,32 +3,14 @@ session_start();
 
 // 真正的安全拦截：未登录踢回登录页
 if (!isset($_SESSION['user_id'])) {
-    header('Location: /authorization/login.php');
+    header('Location: /auth/login.php');
     exit;
 }
 
 $user_id = $_SESSION['user_id'];
 $title = 'My Profile - Mobile2U';
 
-// 1. 数据库连接 (PDO) - 建议以后抽取到单独的 db.php
-$host = '127.0.0.1';
-$db   = 'mobile2u'; // 替换为你的数据库名
-$user = 'root';
-$pass = ''; // 你的数据库密码
-$charset = 'utf8mb4';
-
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-$options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
-];
-
-try {
-    $pdo = new PDO($dsn, $user, $pass, $options);
-} catch (\PDOException $e) {
-    throw new \PDOException($e->getMessage(), (int)$e->getCode());
-}
+require_once __DIR__ . '/../config/database.php';
 
 $success_msg = '';
 $error_msg = '';

@@ -18,18 +18,5 @@ if ($_SESSION['role'] !== 'admin') {
     exit; // 绝对终止脚本，确保下方任何涉及数据库和机密 HTML 的代码都不会被渲染
 }
 
-// 数据库连接 (建议以后抽离成独立的 db.php)
-$host = '127.0.0.1';
-$db   = 'mobile2u';
-$user = 'root';
-$pass = '';
-$charset = 'utf8mb4';
-
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-$options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
-];
-$pdo = new PDO($dsn, $user, $pass, $options);
+require_once __DIR__ . '/../config/database.php';
 ?>

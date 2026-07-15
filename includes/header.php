@@ -1,6 +1,19 @@
 <?php
 if (!defined('ROOT_DIR')) define('ROOT_DIR', __DIR__ . '/../');
+
+// 动态计算该用户的永久购物车数量
+$cart_count = 0;
+if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role'] === 'member') {
+    try {
+        $pdo_cart = new PDO("mysql:host=127.0.0.1;dbname=mobile2u;charset=utf8mb4", "root", "", [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+        $stmt = $pdo_cart->prepare("SELECT SUM(quantity) FROM cart WHERE user_id = ?");
+        $stmt->execute([$_SESSION['user_id']]);
+        $cart_count = $stmt->fetchColumn() ?: 0;
+    } catch (Exception $e) {} // 静默处理，避免连接失败时破坏页面
+}
 ?>
+
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -8,6 +21,7 @@ if (!defined('ROOT_DIR')) define('ROOT_DIR', __DIR__ . '/../');
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?php echo isset($title) ? $title : 'Online Shop'; ?></title>
     <link rel="stylesheet" href="/assets/css/style.css">
+    <link rel="icon" type="image/svg+xml" href="/assets/images/favicon.svg">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="/assets/js/main.js" defer></script>
 </head>
@@ -36,20 +50,19 @@ if (!defined('ROOT_DIR')) define('ROOT_DIR', __DIR__ . '/../');
                     <a href="/admin/members.php">Members</a>
                     <a href="/products.php">Products</a>
                     <a href="/member/profile.php">Profile</a>
-                    <a href="/authorization/logout.php" class="logout-link">Log Out</a>
+                    <a href="/auth/logout.php" class="logout-link">Log Out</a>
 
                 <?php elseif (isset($_SESSION['role']) && $_SESSION['role'] === 'member'): ?>
 
 
                     <a href="/">Home</a>
                     <a href="/products.php">Products</a>
-                    <a href="/cart.php">Cart <span class="cart-count">0</span></a>
+                    <a href="/cart.php">Cart <span class="cart-count"><?php echo $cart_count; ?></span></a>
                     <a href="/member/profile.php">Profile</a>
-                    <a href="/authorization/logout.php" class="logout-link">Log Out</a>
+                    <a href="/auth/logout.php" class="logout-link">Log Out</a>
 
                 <?php else: ?>
-
-                    <a href="/cart.php">Cart <span class="cart-count">0</span></a>
+                    <a href="/cart.php">Cart <span class="cart-count"><?php echo $cart_count; ?></span></a>
 
                 <?php endif; ?>
             <?php endif; ?>

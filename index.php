@@ -5,7 +5,7 @@ session_start();
 // Check if the user is logged in
 if (!isset($_SESSION['user_id'])) {
     // User is NOT logged in, route them to the login page
-    header('Location: /authorization/login.php');
+    header('Location: /auth/login.php');
     exit;
 }
 
