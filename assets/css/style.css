@@ -638,3 +638,51 @@ body {
   .cart-layout { flex-direction: column; }
   .cart-summary-section { width: 100%; position: static; }
 }
+
+/* --- Product Detail Page --- */
+.product-detail-layout {
+  display: flex;
+  gap: 40px;
+  align-items: flex-start;
+}
+
+.product-detail-img-wrapper {
+  flex: 1;
+  max-width: 500px;
+  background: var(--white);
+  padding: 30px;
+  text-align: center;
+  position: sticky;
+  top: 100px;
+}
+
+.product-detail-img {
+  width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+}
+
+.product-detail-info {
+  flex: 1;
+}
+
+@media(max-width: 768px) {
+  .product-detail-layout { flex-direction: column; }
+  .product-detail-img-wrapper { max-width: 100%; position: static; }
+}
+
+
+/* --- Order Status Badges --- */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+.status-pending { background: #fff3cd; color: #856404; }
+.status-processing { background: #cce5ff; color: #004085; }
+.status-shipped { background: #d1ecf1; color: #0c5460; }
+.status-delivered { background: #d4edda; color: #155724; }
+.status-cancelled { background: #f8d7da; color: #721c24; }
