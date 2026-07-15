@@ -23,6 +23,10 @@ if (!defined('ROOT_DIR')) define('ROOT_DIR', __DIR__ . '/../');
         <a href="/">Home</a>
         <a href="/products.php">Products</a>
         <a href="/cart.php">Cart <span class="cart-count">0</span></a>
+          <?php if (isset($_SESSION['user_id'])): ?>
+              <a href="/authorization/logout.php" class="logout-link">Log Out</a>
+          <?php endif; ?>
+
       </nav>
     </div>
   </header>

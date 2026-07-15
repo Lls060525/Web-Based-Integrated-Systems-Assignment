@@ -1,4 +1,10 @@
 <?php
+session_start();
+if (!isset($_SESSION['user_id'])) {
+    header('Location: /authorization/login.php');
+    exit;
+}
+
 $title = 'Home - MyShop';
 include __DIR__ . '/../includes/header.php';
 ?>

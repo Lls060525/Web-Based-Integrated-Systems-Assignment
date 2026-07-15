@@ -6,7 +6,7 @@
         <a href="/contact.php">Contact</a> |
         <a href="/terms.php">Terms</a>
       </div>
-      <p class="copyright">&copy; <?php echo date('Y'); ?> MyShop. All rights reserved.</p>
+      <p class="copyright">&copy; <?php echo date('Y'); ?> Mobile2U. All rights reserved.</p>
     </div>
   </footer>
 </body>
