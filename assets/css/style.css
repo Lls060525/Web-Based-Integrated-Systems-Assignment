@@ -219,6 +219,278 @@ body {
 
 .footer-links a:hover { color: var(--primary); }
 
+/* --- UI Components --- */
+.btn-primary {
+  background: var(--primary);
+  color: var(--white);
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.2s;
+}
+.btn-primary:hover { background: var(--primary-hover); }
+
+.btn-outline {
+  background: transparent;
+  color: var(--text-main);
+  border: 1px solid var(--border);
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: inline-block;
+  font-size: 14px;
+}
+.btn-outline:hover { background: #f9f9f9; }
+
+.mt-2 { margin-top: 10px; }
+.mt-4 { margin-top: 30px; }
+
+/* --- Alert Messages --- */
+.alert {
+  padding: 15px;
+  margin-bottom: 20px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.alert-success { background: #e6f4ea; color: #1e8e3e; border: 1px solid #ceead6; }
+.alert-error { background: #fce8e6; color: #d93025; border: 1px solid #fad2cf; }
+
+/* --- Profile Layout (Flexbox) --- */
+.profile-layout {
+  display: flex;
+  gap: 30px;
+  align-items: flex-start;
+}
+
+.profile-sidebar {
+  width: 250px;
+  background: var(--white);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+  padding: 20px;
+}
+
+.profile-avatar-section {
+  text-align: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-nav { margin-top: 20px; display: flex; flex-direction: column; gap: 5px; }
+.profile-nav a {
+  padding: 10px 15px;
+  text-decoration: none;
+  color: var(--text-main);
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+.profile-nav a:hover, .profile-nav a.active {
+  background: #fcf1ee; /* 浅橘色背景 */
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.profile-content { flex: 1; }
+
+/* --- Forms in Cards --- */
+.card-header {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 15px;
+  margin-bottom: 20px;
+}
+.card-header h2 { margin: 0 0 5px 0; font-size: 20px; }
+.card-header p { margin: 0; color: var(--text-muted); font-size: 14px; }
+
+.form-standard .form-group {
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+}
+.form-standard label { margin-bottom: 8px; font-weight: 500; font-size: 14px; }
+.form-standard input[type="text"],
+.form-standard input[type="email"],
+.form-standard input[type="password"] {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+  outline: none;
+  transition: border 0.2s;
+}
+.form-standard input:focus { border-color: var(--primary); }
+
+/* --- Profile Card & Form Fixes --- */
+/* 1. 给右侧的白色卡片加上四周的内边距 (呼吸空间) */
+.profile-content .card {
+  padding: 30px;
+}
+
+/* 2. 让表单输入框宽度自适应，并防止撑破容器 */
+.form-standard input[type="text"],
+.form-standard input[type="email"],
+.form-standard input[type="password"] {
+  width: 100%;
+  box-sizing: border-box; /* 确保 padding 不会增加整体宽度 */
+}
+
+/* 3. (可选) 给头像丢失的那个小缺口图标加一点美化，限制最大宽度 */
+.avatar-img {
+  width: 120px !important;      /* 强行固定宽度 */
+  height: 120px !important;     /* 强行固定高度，防止被 height: auto 覆盖 */
+  border-radius: 50%;           /* 配合 1:1 宽高即可实现完美的正圆形 */
+  object-fit: cover;            /* 关键：如果用户上传的不是正方形图片，会自动居中裁剪，绝不拉伸变形 */
+  box-sizing: border-box;       /* 确保 3px 的边框包含在 120px 内部，不会撑大图片 */
+  border: 3px solid var(--border);
+  margin-bottom: 15px;
+  background-color: #f9f9f9;
+  display: inline-block;        /* 确保块级特性正常生效 */
+}
+
+/* --- Profile Tabs Transition --- */
+/* 默认隐藏所有个人中心的卡片 */
+.profile-content .card {
+  display: none;
+}
+
+/* 页面初始加载时，强制显示第一个卡片 */
+.profile-content .card:first-child {
+  display: block;
+}
+
+/* 移除多个卡片同时显示时需要的间距 (因为现在是单独显示了) */
+.profile-content .card.mt-4 {
+  margin-top: 0; 
+}
+
+/* --- Readonly Input Style (Light Version) --- */
+.form-standard input[readonly] {
+  background-color: #f1f3f5;      /* 质感高级的浅灰色背景 */
+  color: #495057;                 /* 深灰文字，清晰且稳重 */
+  border: 1px solid #e9ecef;      /* 几乎融入背景的极浅边框 */
+  font-weight: 600;               /* 字体加粗，强调这是系统级身份属性 */
+  border-radius: 6px;             /* 稍微圆润的边角 */
+  
+  /* 核心视觉区分：彻底打破常规输入框的排版 */
+  width: 120px !important;        /* 强制缩短宽度，不再撑满整行 */
+  text-align: center;             /* 徽章风格的文字居中 */
+  padding: 8px 10px;              /* 紧凑的内边距 */
+  
+  /* 交互层面的彻底隔离 */
+  cursor: not-allowed;            /* 鼠标悬停显示禁用图标 */
+  pointer-events: none;           /* 杀手锏：彻底阻断点击事件，文本光标根本点不进去 */
+}
+
+.form-standard input[readonly]:focus {
+  border-color: var(--border);    /* 点击时不会像正常输入框那样变成橘色高亮 */
+  outline: none;
+}
+
+/* --- Toast Notifications (Modern UX) --- */
+.toast-message {
+  position: fixed;
+  top: 80px; /* 悬浮在导航栏下方 */
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 24px;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  font-weight: 600;
+  font-size: 14px;
+  z-index: 9999;
+  display: none; /* 默认隐藏，交由 jQuery 控制动画 */
+}
+
+.toast-success {
+  background-color: #e6f4ea;
+  color: #1e8e3e;
+  border: 1px solid #ceead6;
+}
+
+.toast-error {
+  background-color: #fce8e6;
+  color: #d93025;
+  border: 1px solid #fad2cf;
+}
+
+/* --- Form Actions (Right Alignment) --- */
+.form-actions.text-right {
+  text-align: right;
+  margin-top: 25px;
+}
+
+/* --- Admin & Data Tables --- */
+.admin-container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.admin-search-form {
+    display: flex;
+    gap: 10px;
+}
+
+.admin-search-input {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    width: 250px;
+    outline: none;
+}
+.admin-search-input:focus { border-color: var(--primary); }
+
+.table-responsive {
+    overflow-x: auto;
+}
+
+.admin-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.admin-table th, .admin-table td {
+    padding: 15px;
+    border-bottom: 1px solid var(--border);
+}
+
+.admin-table th {
+    background-color: #f8f9fa;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.admin-table tbody tr:hover {
+    background-color: #fafafa;
+}
+
+.table-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid var(--border);
+}
+
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.text-center { text-align: center; }
+.badge { background: #f1f3f5; color: #495057; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold;}
+
+@media(max-width: 768px) {
+  .profile-layout { flex-direction: column; }
+  .profile-sidebar { width: auto; width: 100%; box-sizing: border-box; }
+}
+
 @media(max-width: 720px) {
   .topbar-inner { flex-direction: column; gap: 15px; }
   .search { width: 100%; }

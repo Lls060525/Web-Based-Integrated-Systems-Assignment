@@ -23,6 +23,7 @@ if (!defined('ROOT_DIR')) define('ROOT_DIR', __DIR__ . '/../');
         <a href="/">Home</a>
         <a href="/products.php">Products</a>
         <a href="/cart.php">Cart <span class="cart-count">0</span></a>
+        <a href="/dashboard/profile.php">Profile</a>
       </nav>
     </div>
   </header>
