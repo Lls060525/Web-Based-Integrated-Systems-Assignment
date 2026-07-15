@@ -1,11 +1,10 @@
 <?php
 session_start();
 
-// 【安全衔接点】未来与 Login 模块对接：
-// 如果没有登录，跳转到登录页。这里为了你现在能测试，我们先强制模拟一个登录状态。
+// 真正的安全拦截：未登录踢回登录页
 if (!isset($_SESSION['user_id'])) {
-    // TODO: 之后改成 header('Location: /login.php'); exit;
-    $_SESSION['user_id'] = 1; // 临时模拟 ID 为 1 的用户已登录
+    header('Location: /authorization/login.php');
+    exit;
 }
 
 $user_id = $_SESSION['user_id'];

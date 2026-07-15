@@ -30,7 +30,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             die("Connection failed: " . $conn->connect_error);
         }
 
-        $stmt = $conn->prepare("SELECT id, password_hash FROM users WHERE email = ?");
+        // 【修改 1】：在 SELECT 中加入 role 字段
+        $stmt = $conn->prepare("SELECT id, password_hash, role FROM users WHERE email = ?");
         $stmt->bind_param("s", $email);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -39,9 +40,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user = $result->fetch_assoc();
 
             if (password_verify($password, $user['password_hash'])) {
-                // Success! Set session and redirect
+                // Success! Set session
                 $_SESSION['user_id'] = $user['id'];
-                header('Location: /dashboard/home.php');
+                $_SESSION['role'] = $user['role']; // 【修改 2】：把角色存入 Session 供全局调用
+
+                // 【修改 3】：智能路由 - Admin 去 admin 包，Member 去 member 包
+                if ($user['role'] === 'admin') {
+                    header('Location: /admin/members.php');
+                } else {
+                    header('Location: /member/home.php');
+                }
                 exit;
             } else {
                 $errors[] = "Invalid password.";
