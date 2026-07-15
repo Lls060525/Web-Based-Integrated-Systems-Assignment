@@ -13,7 +13,7 @@ $title = 'My Profile - Mobile2U';
 
 // 1. 数据库连接 (PDO) - 建议以后抽取到单独的 db.php
 $host = '127.0.0.1';
-$db   = 'web_assignment'; // 替换为你的数据库名
+$db   = 'mobile2u'; // 替换为你的数据库名
 $user = 'root';
 $pass = ''; // 你的数据库密码
 $charset = 'utf8mb4';

@@ -26,7 +26,7 @@ if ($_SESSION['role'] !== 'admin') {
 
 // 数据库连接 (建议以后抽离成独立的 db.php)
 $host = '127.0.0.1';
-$db   = 'web_assignment';
+$db   = 'mobile2u';
 $user = 'root';
 $pass = '';
 $charset = 'utf8mb4';
