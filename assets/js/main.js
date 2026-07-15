@@ -3,19 +3,50 @@ $(function(){
   $('.search input').on('focus', function(){ $(this).closest('.search').addClass('focused'); });
   $('.search input').on('blur', function(){ $(this).closest('.search').removeClass('focused'); });
 
-  // cart count placeholder (could be updated via AJAX)
-  function updateCartCount(n){ $('.cart-count').text(n); }
-  // demo: read from localStorage
-  var count = parseInt(localStorage.getItem('cartCount')||'0',10);
-  updateCartCount(count);
-
-  // example: add-to-cart buttons should trigger this event
+  // --- 购物车动态交互 (AJAX Integration) ---
   $(document).on('click', '.add-to-cart', function(e){
     e.preventDefault();
-    count = (count || 0) + 1;
-    localStorage.setItem('cartCount', count);
-    updateCartCount(count);
+    var productId = $(this).data('id');
+    var $btn = $(this);
+    
+    // UI 反馈：防止用户连续狂点
+    var originalText = $btn.text();
+    $btn.text('Adding...').prop('disabled', true);
+
+    $.ajax({
+        url: '/api/cart_action.php',
+        type: 'POST',
+        data: { action: 'add', product_id: productId },
+        dataType: 'json',
+        success: function(res) {
+            if (res.status === 'success') {
+                $('.cart-count').text(res.cart_count); // 瞬间更新右上角购物车数字
+                showJSToast(res.message, 'success');
+            } else {
+                showJSToast(res.message, 'error');
+                // 如果后端说没登录，1.5秒后自动踢去登录页
+                if(res.message.includes('log in')) {
+                    setTimeout(function(){ window.location.href = '/auth/login.php'; }, 1500);
+                }
+            }
+        },
+        error: function() {
+            showJSToast('Server error. Please try again.', 'error');
+        },
+        complete: function() {
+            $btn.text(originalText).prop('disabled', false); // 恢复按钮状态
+        }
+    });
   });
+
+  // 让 JS 也能呼叫我们之前做好的 Toast 弹窗动画
+  function showJSToast(message, type) {
+      $('.js-toast').remove(); 
+      var cssClass = type === 'success' ? 'toast-success' : 'toast-error';
+      var $toast = $('<div class="toast-message js-toast ' + cssClass + '">' + message + '</div>');
+      $('body').append($toast);
+      $toast.fadeIn(300).delay(3000).fadeOut(300, function(){ $(this).remove(); });
+  }
 
   // --- Profile Sidebar Tabs Transition ---
   $('.profile-nav a[href^="#"]').on('click', function(e) {
