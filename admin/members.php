@@ -19,12 +19,38 @@ if ($search_query !== '') {
     $params[] = $search_term;
 }
 
-$sql .= " ORDER BY created_at DESC"; // 最新注册的排在最前
+$sql .= " ORDER BY id ASC"; // 按 ID 升序排列 (从 1 开始往下排)
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $members = $stmt->fetchAll();
 
+// ==========================================
+// 核心逻辑：判断是否为 jQuery AJAX 请求
+// ==========================================
+$is_ajax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
+if ($is_ajax) {
+    // 如果是 AJAX，只生成 <tbody> 里面的 HTML 结构，不包含头部和尾部
+    if (count($members) > 0) {
+        foreach ($members as $user) {
+            $avatar = $user['profile_photo'] === 'default-avatar.png' ? 'default-avatar.png' : $user['profile_photo'];
+            echo '<tr>';
+            echo '<td>#' . $user['id'] . '</td>';
+            echo '<td><img src="/assets/uploads/avatars/' . htmlspecialchars($avatar) . '" alt="avatar" class="table-avatar"></td>';
+            echo '<td><strong>' . htmlspecialchars($user['name']) . '</strong></td>';
+            echo '<td>' . htmlspecialchars($user['email']) . '</td>';
+            echo '<td>' . date('d M Y', strtotime($user['created_at'])) . '</td>';
+            echo '<td><a href="/admin/member_detail.php?id=' . $user['id'] . '" class="btn-outline btn-sm">View Detail</a></td>';
+            echo '</tr>';
+        }
+    } else {
+        echo '<tr><td colspan="6" class="text-center" style="padding: 30px; color: var(--text-muted);">No members found.</td></tr>';
+    }
+    exit; // 必须 exit，防止后续的 header 和 footer 也被当成数据传给前端
+}
+
+// 如果不是 AJAX（用户直接输入网址访问），则继续渲染完整页面
 include __DIR__ . '/../includes/header.php';
 ?>
 

@@ -14,21 +14,37 @@ if (!defined('ROOT_DIR')) define('ROOT_DIR', __DIR__ . '/../');
 <body>
   <header class="topbar">
     <div class="container topbar-inner">
+      
       <div class="logo"><a href="/">Mobile2U</a></div>
       <form class="search" action="/search.php" method="get">
         <input type="text" name="q" placeholder="Search products...">
         <button type="submit">Search</button>
       </form>
+
       <nav class="nav">
         <a href="/">Home</a>
         <a href="/products.php">Products</a>
-        <a href="/cart.php">Cart <span class="cart-count">0</span></a>
-        <a href="/dashboard/profile.php">Profile</a>
-          <?php if (isset($_SESSION['user_id'])): ?>
-              <a href="/authorization/logout.php" class="logout-link">Log Out</a>
-          <?php endif; ?>
 
+        <?php if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin'): ?>
+            
+            <a href="/admin/members.php">Members</a>
+            <a href="/member/profile.php">Profile</a>
+            <a href="/authorization/logout.php" class="logout-link">Log Out</a>
+
+        <?php elseif (isset($_SESSION['role']) && $_SESSION['role'] === 'member'): ?>
+            
+            <a href="/cart.php">Cart <span class="cart-count">0</span></a>
+            <a href="/member/profile.php">Profile</a>
+            <a href="/authorization/logout.php" class="logout-link">Log Out</a>
+
+        <?php else: ?>
+            
+            <a href="/cart.php">Cart <span class="cart-count">0</span></a>
+            <a href="/authorization/login.php" class="logout-link" style="background: var(--primary); color: white;">Log In</a>
+
+        <?php endif; ?>
       </nav>
+
     </div>
   </header>
   <main class="content container">

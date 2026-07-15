@@ -82,4 +82,43 @@ $(function(){
   $profileName.on('input', checkProfileChanges);
   $profileEmail.on('input', checkProfileChanges);
   
+  // --- Admin Dynamic Search (AJAX Integration) ---
+  var searchTimer; // 用于防抖 (Debounce) 的计时器
+  
+  // 阻止搜索表单按回车时导致页面跳转刷新
+  $('.admin-search-form').on('submit', function(e) {
+      e.preventDefault();
+  });
+
+  // 监听搜索框的实时输入事件
+  $('.admin-search-input').on('input', function() {
+      var query = $(this).val();
+      var $tbody = $('.admin-table tbody');
+
+      // 清除上一次的计时器（用户如果连续打字，就不会发请求）
+      clearTimeout(searchTimer);
+      
+      // 等用户停止打字 300 毫秒后，再向服务器发送 AJAX 请求
+      searchTimer = setTimeout(function() {
+          // 可选：在等待数据时显示 Loading 状态
+          $tbody.html('<tr><td colspan="6" class="text-center" style="padding: 20px; color: var(--text-muted);">Searching...</td></tr>');
+
+          $.ajax({
+              url: '/admin/members.php',
+              type: 'GET',
+              data: { q: query }, // 发送搜索关键词
+              success: function(response) {
+                  // 将服务器吐出的纯 <tr> 标签直接塞进表格主体
+                  $tbody.html(response);
+                  
+                  // 高级 UX 细节：利用 HTML5 History API 悄悄修改网址栏，方便用户刷新或分享，但不触发页面重载
+                  var newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + (query ? '?q=' + encodeURIComponent(query) : '');
+                  window.history.pushState({path: newUrl}, '', newUrl);
+              },
+              error: function() {
+                  $tbody.html('<tr><td colspan="6" class="text-center" style="color: red;">Error fetching data.</td></tr>');
+              }
+          });
+      }, 300); // 300ms 防抖时间
+  });
 });

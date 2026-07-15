@@ -475,11 +475,14 @@ body {
 }
 
 .table-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    object-fit: cover;
+    width: 40px !important;       /* 强制固定宽度 */
+    height: 40px !important;      /* 强制固定高度，防止被其他样式拉伸 */
+    border-radius: 50% !important;/* 强制切成正圆形 */
+    object-fit: cover !important; /* 核心：让非正方形图片自动按比例居中填满，绝不压扁变形 */
+    box-sizing: border-box;
     border: 1px solid var(--border);
+    display: inline-block;        /* 确保在表格单元格(td)中排版正常 */
+    background-color: #f9f9f9;    /* 防止透明 PNG 或加载失败时太难看 */
 }
 
 .btn-sm { padding: 5px 10px; font-size: 12px; }
