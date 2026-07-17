@@ -1,11 +1,11 @@
 <?php
 session_start();
 
-// 防止缓存，确保安全性
+
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
 header("Pragma: no-cache");
 
-// 如果已登录，重定向
+
 if (isset($_SESSION['user_id'])) {
     header('Location: /index.php');
     exit;
@@ -14,7 +14,7 @@ if (isset($_SESSION['user_id'])) {
 $title = 'Login - Mobile2U';
 $is_auth_page = true;
 
-// 引入全局数据库配置
+
 require_once __DIR__ . '/../config/database.php';
 include __DIR__ . '/../includes/header.php';
 
@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = "Please enter a valid email address.";
     } else {
-        // 使用 PDO 查询
+        
         $stmt = $pdo->prepare("SELECT id, password_hash, role FROM users WHERE email = ?");
         $stmt->execute([$email]);
         $user = $stmt->fetch();
@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['role'] = $user['role'];
 
-            // 智能路由
+           
             if ($user['role'] === 'admin') {
                 header('Location: /admin/members.php');
             } else {

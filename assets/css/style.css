@@ -290,14 +290,14 @@ body {
   transition: all 0.2s;
 }
 .profile-nav a:hover, .profile-nav a.active {
-  background: #fcf1ee; /* 浅橘色背景 */
+  background: #fcf1ee; 
   color: var(--primary);
   font-weight: 600;
 }
 
 .profile-content { flex: 1; }
 
-/* --- Forms in Cards --- */
+
 .card-header {
   border-bottom: 1px solid var(--border);
   padding-bottom: 15px;
@@ -324,76 +324,74 @@ body {
 }
 .form-standard input:focus { border-color: var(--primary); }
 
-/* --- Profile Card & Form Fixes --- */
-/* 1. 给右侧的白色卡片加上四周的内边距 (呼吸空间) */
+
 .profile-content .card {
   padding: 30px;
 }
 
-/* 2. 让表单输入框宽度自适应，并防止撑破容器 */
 .form-standard input[type="text"],
 .form-standard input[type="email"],
 .form-standard input[type="password"] {
   width: 100%;
-  box-sizing: border-box; /* 确保 padding 不会增加整体宽度 */
+  box-sizing: border-box; 
 }
 
-/* 3. (可选) 给头像丢失的那个小缺口图标加一点美化，限制最大宽度 */
+
 .avatar-img {
-  width: 120px !important;      /* 强行固定宽度 */
-  height: 120px !important;     /* 强行固定高度，防止被 height: auto 覆盖 */
-  border-radius: 50%;           /* 配合 1:1 宽高即可实现完美的正圆形 */
-  object-fit: cover;            /* 关键：如果用户上传的不是正方形图片，会自动居中裁剪，绝不拉伸变形 */
-  box-sizing: border-box;       /* 确保 3px 的边框包含在 120px 内部，不会撑大图片 */
+  width: 120px !important;      
+  height: 120px !important;     
+  border-radius: 50%;         
+  object-fit: cover;            
+  box-sizing: border-box;      
   border: 3px solid var(--border);
   margin-bottom: 15px;
   background-color: #f9f9f9;
-  display: inline-block;        /* 确保块级特性正常生效 */
+  display: inline-block;     
 }
 
 /* --- Profile Tabs Transition --- */
-/* 默认隐藏所有个人中心的卡片 */
+
 .profile-content .card {
   display: none;
 }
 
-/* 页面初始加载时，强制显示第一个卡片 */
+/* when page load display profile*/
 .profile-content .card:first-child {
   display: block;
 }
 
-/* 移除多个卡片同时显示时需要的间距 (因为现在是单独显示了) */
+
 .profile-content .card.mt-4 {
   margin-top: 0; 
 }
 
 /* --- Readonly Input Style (Light Version) --- */
 .form-standard input[readonly] {
-  background-color: #f1f3f5;      /* 质感高级的浅灰色背景 */
-  color: #495057;                 /* 深灰文字，清晰且稳重 */
-  border: 1px solid #e9ecef;      /* 几乎融入背景的极浅边框 */
-  font-weight: 600;               /* 字体加粗，强调这是系统级身份属性 */
-  border-radius: 6px;             /* 稍微圆润的边角 */
+  background-color: #f1f3f5;      
+  color: #495057;                
+  border: 1px solid #e9ecef;     
+  font-weight: 600;              
+  border-radius: 6px;           
   
-  /* 核心视觉区分：彻底打破常规输入框的排版 */
-  width: 120px !important;        /* 强制缩短宽度，不再撑满整行 */
-  text-align: center;             /* 徽章风格的文字居中 */
-  padding: 8px 10px;              /* 紧凑的内边距 */
+
+  width: 120px !important;       
+  text-align: center;            
+  padding: 8px 10px;             
   
-  /* 交互层面的彻底隔离 */
-  cursor: not-allowed;            /* 鼠标悬停显示禁用图标 */
-  pointer-events: none;           /* 杀手锏：彻底阻断点击事件，文本光标根本点不进去 */
+  
+  cursor: not-allowed;           
+  pointer-events: none;          
 }
 
 .form-standard input[readonly]:focus {
-  border-color: var(--border);    /* 点击时不会像正常输入框那样变成橘色高亮 */
+  border-color: var(--border);   
   outline: none;
 }
 
 /* --- Toast Notifications (Modern UX) --- */
 .toast-message {
   position: fixed;
-  top: 80px; /* 悬浮在导航栏下方 */
+  top: 80px; 
   left: 50%;
   transform: translateX(-50%);
   padding: 12px 24px;
@@ -402,7 +400,7 @@ body {
   font-weight: 600;
   font-size: 14px;
   z-index: 9999;
-  display: none; /* 默认隐藏，交由 jQuery 控制动画 */
+  display: none; 
 }
 
 .toast-success {
@@ -478,14 +476,14 @@ body {
 }
 
 .table-avatar {
-    width: 40px !important;       /* 强制固定宽度 */
-    height: 40px !important;      /* 强制固定高度，防止被其他样式拉伸 */
-    border-radius: 50% !important;/* 强制切成正圆形 */
-    object-fit: cover !important; /* 核心：让非正方形图片自动按比例居中填满，绝不压扁变形 */
+    width: 40px !important;      
+    height: 40px !important;     
+    border-radius: 50% !important;
+    object-fit: cover !important;
     box-sizing: border-box;
     border: 1px solid var(--border);
-    display: inline-block;        /* 确保在表格单元格(td)中排版正常 */
-    background-color: #f9f9f9;    /* 防止透明 PNG 或加载失败时太难看 */
+    display: inline-block;        
+    background-color: #f9f9f9;   
 }
 
 .btn-sm { padding: 5px 10px; font-size: 12px; }
@@ -609,13 +607,13 @@ body {
 }
 
 .cart-items-section {
-  flex: 1; /* 左侧商品列表占满剩余空间 */
+  flex: 1; 
 }
 
 .cart-summary-section {
-  width: 320px; /* 右侧结算板固定宽度 */
+  width: 320px; 
   position: sticky;
-  top: 100px; /* 滚动时随视口吸顶悬浮 */
+  top: 100px; 
 }
 
 .qty-input {
@@ -631,8 +629,7 @@ body {
 }
 
 .cart-table th, .cart-table td {
-  vertical-align: middle; /* 确保商品图片和文字垂直居中对齐 */
-}
+  vertical-align: middle; }
 
 @media(max-width: 850px) {
   .cart-layout { flex-direction: column; }

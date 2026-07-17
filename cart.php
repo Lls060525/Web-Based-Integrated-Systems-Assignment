@@ -2,7 +2,6 @@
 session_start();
 $title = 'My Cart - Mobile2U';
 
-// 1. 安全拦截：只有 Member 可以访问购物车
 if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role'] !== 'member')) {
     header('Location: /auth/login.php');
     exit;
@@ -11,23 +10,22 @@ if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role
 $user_id = $_SESSION['user_id'];
 $pdo = new PDO("mysql:host=127.0.0.1;dbname=mobile2u;charset=utf8mb4", "root", "", [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
 
-// 2. 处理表单提交 (PRG Pattern: Update / Delete)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    // 更新数量逻辑
+    
     if ($action === 'update_cart') {
         $quantities = $_POST['quantities'] ?? [];
         foreach ($quantities as $cart_id => $qty) {
             $qty = (int)$qty;
             if ($qty > 0) {
-                // 安全校验：关联查出商品实时库存，防止恶意篡改前端数量绕过限制
+                
                 $stmt = $pdo->prepare("SELECT p.stock FROM cart c JOIN products p ON c.product_id = p.id WHERE c.id = ? AND c.user_id = ?");
                 $stmt->execute([$cart_id, $user_id]);
                 $stock = $stmt->fetchColumn();
 
                 if ($stock !== false) {
-                    $final_qty = min($qty, $stock); // 确保最高只能买到库存上限
+                    $final_qty = min($qty, $stock);
                     $update_stmt = $pdo->prepare("UPDATE cart SET quantity = ? WHERE id = ? AND user_id = ?");
                     $update_stmt->execute([$final_qty, $cart_id, $user_id]);
                 }
@@ -36,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         header("Location: /cart.php");
         exit;
     } 
-    // 删除单个商品逻辑
+  
     elseif ($action === 'remove_item') {
         $cart_id = filter_input(INPUT_POST, 'cart_id', FILTER_VALIDATE_INT);
         if ($cart_id) {
@@ -48,7 +46,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// 3. 联合查询 (Join)：拉取购物车数据与最新的商品详情
 $stmt = $pdo->prepare("
     SELECT c.id AS cart_id, c.quantity, 
            p.id AS product_id, p.name, p.price, p.image, p.stock 
@@ -103,7 +100,7 @@ include __DIR__ . '/includes/header.php';
                                         $total_items += $item['quantity'];
                                         $image_path = $item['image'] === 'default-product.png' ? '/assets/images/default-product.png' : '/assets/uploads/products/' . htmlspecialchars($item['image']);
                                         
-                                        // 智能修复：如果管理员偷偷在后台改了库存，导致购物车数量超标，强行纠正红字提示
+                                       
                                         $qty_warning = '';
                                         if ($item['quantity'] > $item['stock']) {
                                             $qty_warning = '<br><span style="color:red; font-size:12px;">Only ' . $item['stock'] . ' left in stock!</span>';

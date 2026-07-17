@@ -1,7 +1,6 @@
 <?php
 session_start();
 
-// 真正的安全拦截：未登录踢回登录页
 if (!isset($_SESSION['user_id'])) {
     header('Location: /auth/login.php');
     exit;
@@ -15,11 +14,10 @@ require_once __DIR__ . '/../config/database.php';
 $success_msg = '';
 $error_msg = '';
 
-// 2. 处理表单提交 (使用 PRG 模式与 Session Flash Message)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    // --- A. 更新基本资料 ---
+    // --- A. update profilee ---
     if ($action === 'update_profile') {
         $name = trim($_POST['name'] ?? '');
         $email = trim($_POST['email'] ?? '');
@@ -36,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // --- B. 更新密码 ---
+    // --- B. update password ---
     if ($action === 'update_password') {
         $current_password = $_POST['current_password'] ?? '';
         $new_password = $_POST['new_password'] ?? '';
@@ -64,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
-    // --- C. 上传头像 ---
+    // --- C. upload photo ---
     if ($action === 'upload_photo' && isset($_FILES['profile_photo'])) {
         $file = $_FILES['profile_photo'];
         
@@ -122,29 +120,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // ==========================================
-    // 核心安全逻辑：PRG Pattern (重定向以清除 POST 状态)
+    // after upload photo go back to proile clear post request
     // ==========================================
     header('Location: profile.php');
     exit;
 }
 
-// ==========================================
-// 提取闪存消息 (Flash Messages) 并立刻销毁
-// ==========================================
+
 $success_msg = $_SESSION['success_msg'] ?? '';
 $error_msg = $_SESSION['error_msg'] ?? '';
 unset($_SESSION['success_msg'], $_SESSION['error_msg']);
 
-// 3. 获取当前用户最新数据渲染页面
 $stmt = $pdo->prepare("SELECT name, email, role, profile_photo FROM users WHERE id = ?");
 $stmt->execute([$user_id]);
 $currentUser = $stmt->fetch();
 
-// 处理默认头像
 $avatar_path = !empty($currentUser['profile_photo']) && $currentUser['profile_photo'] !== 'default-avatar.png' 
     ? '/assets/uploads/avatars/' . htmlspecialchars($currentUser['profile_photo']) 
-    : '/assets/images/default-avatar.png'; // 你可以在 images 放一个默认图片
-
+    : '/assets/images/default-avatar.png'; 
+    
 include __DIR__ . '/../includes/header.php';
 ?>
 

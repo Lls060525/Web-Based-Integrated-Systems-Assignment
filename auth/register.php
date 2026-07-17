@@ -21,14 +21,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (strlen($password) < 6) {
         $errors[] = "Password must be at least 6 characters.";
     } else {
-        // 检查邮箱是否存在
+        
         $check = $pdo->prepare("SELECT id FROM users WHERE email = ?");
         $check->execute([$email]);
         
         if ($check->fetch()) {
             $errors[] = "This email is already registered.";
         } else {
-            // 插入新用户 (默认 role 为 member)
+          
             $hashed = password_hash($password, PASSWORD_DEFAULT);
             $stmt = $pdo->prepare("INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, 'member')");
             

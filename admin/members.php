@@ -1,17 +1,14 @@
 <?php
-// 第一行强制引入网关，阻断非法访问
+
 require_once __DIR__ . '/admin_auth.php';
 
 $title = 'Member Management - Admin';
 
-// 接收搜索关键字 (GET 请求，方便用户分享或收藏搜索结果)
 $search_query = trim($_GET['q'] ?? '');
 
-// 构建基础 SQL：只查询角色为 member 的用户
 $sql = "SELECT id, name, email, profile_photo, created_at FROM users WHERE role = 'member'";
 $params = [];
 
-// 如果有搜索词，动态拼接 SQL (严格使用参数化查询防注入)
 if ($search_query !== '') {
     $sql .= " AND (name LIKE ? OR email LIKE ?)";
     $search_term = "%{$search_query}%";
@@ -19,19 +16,17 @@ if ($search_query !== '') {
     $params[] = $search_term;
 }
 
-$sql .= " ORDER BY id ASC"; // 按 ID 升序排列 (从 1 开始往下排)
+$sql .= " ORDER BY id ASC"; 
 
 $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $members = $stmt->fetchAll();
 
-// ==========================================
-// 核心逻辑：判断是否为 jQuery AJAX 请求
-// ==========================================
+// see if it is AJAX if yes then no need reload the pag
 $is_ajax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
 if ($is_ajax) {
-    // 如果是 AJAX，只生成 <tbody> 里面的 HTML 结构，不包含头部和尾部
+    
     if (count($members) > 0) {
         foreach ($members as $user) {
             $avatar = $user['profile_photo'] === 'default-avatar.png' ? 'default-avatar.png' : $user['profile_photo'];
@@ -47,10 +42,10 @@ if ($is_ajax) {
     } else {
         echo '<tr><td colspan="6" class="text-center" style="padding: 30px; color: var(--text-muted);">No members found.</td></tr>';
     }
-    exit; // 必须 exit，防止后续的 header 和 footer 也被当成数据传给前端
+    exit; 
 }
 
-// 如果不是 AJAX（用户直接输入网址访问），则继续渲染完整页面
+
 include __DIR__ . '/../includes/header.php';
 ?>
 

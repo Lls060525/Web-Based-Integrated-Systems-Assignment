@@ -4,7 +4,7 @@ require_once __DIR__ . '/admin_auth.php';
 $order_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 if (!$order_id) die("Invalid Order ID.");
 
-// 1. 查询订单主体信息
+
 $stmt = $pdo->prepare("
     SELECT o.*, u.name as customer_name, u.email as customer_email, u.profile_photo 
     FROM orders o JOIN users u ON o.user_id = u.id 
@@ -14,7 +14,7 @@ $stmt->execute([$order_id]);
 $order = $stmt->fetch();
 if (!$order) die("Order not found.");
 
-// 2. 查询订单包含的商品明细
+
 $item_stmt = $pdo->prepare("
     SELECT oi.*, p.name as product_name, p.image 
     FROM order_items oi 

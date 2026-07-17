@@ -1,7 +1,7 @@
 <?php
 session_start();
 
-// 1. 安全拦截：只有 Member 可以查看自己的订单
+
 if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role'] !== 'member')) {
     header('Location: /auth/login.php');
     exit;
@@ -10,19 +10,17 @@ if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role
 $user_id = $_SESSION['user_id'];
 $title = 'My Orders - Mobile2U';
 
-// 引入数据库配置
 require_once __DIR__ . '/config/database.php';
 
-// 2. 获取该用户的所有订单 (按时间倒序，最新的在最上面)
+
 $stmt = $pdo->prepare("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC");
 $stmt->execute([$user_id]);
 $orders = $stmt->fetchAll();
 
-// 3. 性能优化：使用 IN 语句一次性获取这些订单下的所有商品明细
 $order_items = [];
 if (count($orders) > 0) {
     $order_ids = array_column($orders, 'id');
-    // 动态生成 ?,?,? 占位符
+    
     $in_clause = implode(',', array_fill(0, count($order_ids), '?'));
 
     $item_stmt = $pdo->prepare("
@@ -34,7 +32,6 @@ if (count($orders) > 0) {
     $item_stmt->execute($order_ids);
     $fetched_items = $item_stmt->fetchAll();
 
-    // 在 PHP 内存中按 order_id 把商品归类分组
     foreach ($fetched_items as $item) {
         $order_items[$item['order_id']][] = $item;
     }

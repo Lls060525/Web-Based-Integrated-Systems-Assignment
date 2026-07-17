@@ -3,14 +3,13 @@ session_start();
 
 require_once __DIR__ . '/config/database.php';
 
-// 获取并验证 URL 中的商品 ID
+
 $product_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 if (!$product_id) {
-    header('Location: /products.php'); // 如果没有 ID，踢回列表页
+    header('Location: /products.php'); 
     exit;
 }
 
-// 关联查询商品信息（如果有 category，顺便查出来）
 $sql = "SELECT p.*, c.name AS category_name 
         FROM products p 
         LEFT JOIN categories c ON p.category_id = c.id 

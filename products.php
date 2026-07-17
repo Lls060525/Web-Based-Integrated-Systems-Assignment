@@ -2,7 +2,7 @@
 session_start();
 $title = 'Products - Mobile2U';
 
-require_once __DIR__ . '/config/database.php'; // 如果文件在根目录
+require_once __DIR__ . '/config/database.php'; 
 
 $sql = "SELECT * FROM products ORDER BY id DESC";
 $stmt = $pdo->prepare($sql);
@@ -20,7 +20,7 @@ include __DIR__ . '/includes/header.php';
     <div class="grid">
         <?php foreach ($products as $p): ?>
             <?php 
-                // 【适配字段】：product_image 改为 image
+                
                 $image_path = $p['image'] === 'default-product.png' ? '/assets/images/default-product.png' : '/assets/uploads/products/' . htmlspecialchars($p['image']);
             ?>
             <div class="card">

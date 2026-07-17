@@ -1,7 +1,7 @@
 <?php
 if (!defined('ROOT_DIR')) define('ROOT_DIR', __DIR__ . '/../');
 
-// 动态计算该用户的永久购物车数量
+
 $cart_count = 0;
 if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role'] === 'member') {
     try {
@@ -9,7 +9,7 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
         $stmt = $pdo_cart->prepare("SELECT SUM(quantity) FROM cart WHERE user_id = ?");
         $stmt->execute([$_SESSION['user_id']]);
         $cart_count = $stmt->fetchColumn() ?: 0;
-    } catch (Exception $e) {} // 静默处理，避免连接失败时破坏页面
+    } catch (Exception $e) {} 
 }
 ?>
 

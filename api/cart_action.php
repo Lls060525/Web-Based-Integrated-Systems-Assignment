@@ -14,7 +14,7 @@ $action = $_POST['action'] ?? '';
 $product_id = filter_input(INPUT_POST, 'product_id', FILTER_VALIDATE_INT);
 
 if ($action === 'add' && $product_id) {
-    // 【适配字段】：stock_quantity 改为 stock
+    
     $stmt = $pdo->prepare("SELECT stock FROM products WHERE id = ?");
     $stmt->execute([$product_id]);
     $stock = $stmt->fetchColumn();

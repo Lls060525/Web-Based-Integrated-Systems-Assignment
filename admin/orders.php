@@ -3,7 +3,6 @@ require_once __DIR__ . '/admin_auth.php';
 
 $title = 'Order Management - Admin';
 
-// --- 1. 处理订单状态更新 (PRG 模式防重复提交) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_status') {
     $order_id = filter_input(INPUT_POST, 'order_id', FILTER_VALIDATE_INT);
     $new_status = $_POST['status'] ?? '';
@@ -19,9 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['
     exit;
 }
 
-// --- 2. 拉取订单数据 (带搜索) ---
 $search_query = trim($_GET['q'] ?? '');
-// 联合 users 表，查出买家的名字和邮箱
+
 $sql = "SELECT o.*, u.name as customer_name, u.email as customer_email 
         FROM orders o 
         JOIN users u ON o.user_id = u.id 
@@ -40,7 +38,7 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $orders = $stmt->fetchAll();
 
-// --- 3. AJAX 分流渲染逻辑 ---
+
 $is_ajax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
 if ($is_ajax) {

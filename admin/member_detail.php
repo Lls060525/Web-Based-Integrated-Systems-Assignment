@@ -1,14 +1,14 @@
 <?php
 require_once __DIR__ . '/admin_auth.php';
 
-// 验证 ID 是否合法
+// validate id
 $id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
 
 if (!$id) {
     die("Invalid Member ID.");
 }
 
-// 查询该用户详细信息
+// validate the user info
 $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ? AND role = 'member'");
 $stmt->execute([$id]);
 $member = $stmt->fetch();
