@@ -17,30 +17,30 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?php echo isset($title) ? $title : 'Online Shop'; ?></title>
-    <link rel="stylesheet" href="/assets/css/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><?php echo isset($title) ? $title : 'Online Shop'; ?></title>
+  <link rel="stylesheet" href="/assets/css/style.css">
     <link rel="icon" type="image/svg+xml" href="/assets/images/favicon.svg">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script src="/assets/js/main.js" defer></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="/assets/js/main.js" defer></script>
 </head>
 <body>
-<header class="topbar">
+  <header class="topbar">
     <div class="container topbar-inner">
 
-        <div class="logo"><a href="/">Mobile2U</a></div>
+      <div class="logo"><a href="/">Mobile2U</a></div>
 
         <?php if (!isset($is_auth_page) || !$is_auth_page): ?>
-            <form class="search" action="/search.php" method="get">
-                <input type="text" name="q" placeholder="Search products...">
-                <button type="submit">Search</button>
-            </form>
+      <form class="search" action="/search.php" method="get">
+        <input type="text" name="q" placeholder="Search products...">
+        <button type="submit">Search</button>
+      </form>
         <?php else: ?>
             <div style="flex: 1;"></div>
         <?php endif; ?>
 
-        <nav class="nav">
+      <nav class="nav">
 
             <?php if (!isset($is_auth_page) || !$is_auth_page): ?>
 
@@ -54,8 +54,8 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
                 <?php elseif (isset($_SESSION['role']) && $_SESSION['role'] === 'member'): ?>
 
 
-                    <a href="/">Home</a>
-                    <a href="/products.php">Products</a>
+        <a href="/">Home</a>
+        <a href="/products.php">Products</a>
                     <a href="/cart.php">Cart <span class="cart-count"><?php echo $cart_count; ?></span></a>
                     <a href="/member/profile.php">Profile</a>
                     <a href="/auth/logout.php" class="logout-link">Log Out</a>
@@ -63,10 +63,10 @@ if (isset($_SESSION['user_id']) && isset($_SESSION['role']) && $_SESSION['role']
                 <?php else: ?>
                     <a href="/cart.php">Cart <span class="cart-count"><?php echo $cart_count; ?></span></a>
 
-                <?php endif; ?>
+          <?php endif; ?>
             <?php endif; ?>
-        </nav>
+      </nav>
 
     </div>
-</header>
-<main class="content container">
+  </header>
+  <main class="content container">
