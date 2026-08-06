@@ -1,117 +1,159 @@
 <?php
-session_start();
+// ============================================================
+// orders.php - Order History (Member)
+//
+// Cancellation itself lives on /order_cancel.php so the member
+// gets a proper confirmation screen and can state a reason.
+// ============================================================
 
-// 1. 安全拦截：只有 Member 可以查看自己的订单
-if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role'] !== 'member')) {
-    header('Location: /auth/login.php');
-    exit;
+require_once __DIR__ . '/lib/init.php';
+require_once __DIR__ . '/includes/order_parts.php';
+
+require_member();
+
+$title  = 'My Orders - ' . APP_NAME;
+$userId = current_user_id();
+
+// ---------- Optional status filter ----------
+$statusFilter = get('status');
+
+$sql    = 'SELECT * FROM orders WHERE user_id = ?';
+$params = [$userId];
+
+if (in_array($statusFilter, ORDER_STATUSES, true)) {
+    $sql     .= ' AND status = ?';
+    $params[] = $statusFilter;
 }
 
-$user_id = $_SESSION['user_id'];
-$title = 'My Orders - Mobile2U';
+$sql .= ' ORDER BY created_at DESC';
 
-// 引入数据库配置
-require_once __DIR__ . '/config/database.php';
+$orders = db_all($sql, $params);
 
-// 2. 获取该用户的所有订单 (按时间倒序，最新的在最上面)
-$stmt = $pdo->prepare("SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC");
-$stmt->execute([$user_id]);
-$orders = $stmt->fetchAll();
-
-// 3. 性能优化：使用 IN 语句一次性获取这些订单下的所有商品明细
-$order_items = [];
+// ---------- Load every line in one query, then group ----------
+$orderItems = [];
 if (count($orders) > 0) {
-    $order_ids = array_column($orders, 'id');
-    // 动态生成 ?,?,? 占位符
-    $in_clause = implode(',', array_fill(0, count($order_ids), '?'));
+    $orderIds     = array_column($orders, 'id');
+    $placeholders = implode(',', array_fill(0, count($orderIds), '?'));
 
-    $item_stmt = $pdo->prepare("
-        SELECT oi.order_id, oi.quantity, oi.price_at_purchase, p.name, p.image 
-        FROM order_items oi 
-        JOIN products p ON oi.product_id = p.id 
-        WHERE oi.order_id IN ($in_clause)
-    ");
-    $item_stmt->execute($order_ids);
-    $fetched_items = $item_stmt->fetchAll();
+    $rows = db_all(
+        "SELECT oi.order_id, oi.quantity, oi.price_at_purchase, p.name, p.image
+           FROM order_items oi
+           JOIN products p ON p.id = oi.product_id
+          WHERE oi.order_id IN ($placeholders)",
+        $orderIds
+    );
 
-    // 在 PHP 内存中按 order_id 把商品归类分组
-    foreach ($fetched_items as $item) {
-        $order_items[$item['order_id']][] = $item;
+    foreach ($rows as $row) {
+        $orderItems[$row['order_id']][] = $row;
     }
 }
 
 include __DIR__ . '/includes/header.php';
 ?>
 
-<div class="container mt-4" style="max-width: 900px;">
-    <nav style="margin-bottom: 20px; font-size: 14px; color: var(--text-muted);">
-        <a href="/member/profile.php" style="color: var(--text-muted); text-decoration: none;">My Profile</a> > 
-        <span style="color: var(--text-main); font-weight: 500;">My Orders</span>
-    </nav>
+<nav class="breadcrumb">
+    <a href="/member/profile.php">My Profile</a> &gt; <span>My Orders</span>
+</nav>
 
-    <div class="admin-header">
-        <h2>My Orders</h2>
+<div class="page-title-row">
+    <h2 class="page-title">My Orders</h2>
+
+    <form action="/orders.php" method="GET" class="filter-form-inline">
+        <?php html_select('status', ORDER_STATUS_LABELS, $statusFilter,
+                          ['class' => 'form-control form-control-sm js-auto-submit'],
+                          'All orders'); ?>
+        <noscript><?php html_submit('Filter', ['class' => 'btn-outline btn-sm']); ?></noscript>
+    </form>
+</div>
+
+<?php if (count($orders) === 0): ?>
+
+    <div class="card empty-state-box">
+        <img src="/assets/images/default-product.png" alt="" class="empty-state-img">
+        <h3 class="empty-state-title">
+            <?= $statusFilter !== '' ? 'No orders with that status.' : "You haven't placed any orders yet." ?>
+        </h3>
+        <p>Explore our latest flagship devices and gear.</p>
+        <a href="/products.php" class="btn-primary shop-now-btn">Shop Now</a>
     </div>
 
-    <?php if (empty($orders)): ?>
-        <div class="card mt-4" style="text-align: center; padding: 60px 20px;">
-            <img src="/assets/images/default-product.png" alt="No Orders" style="width: 100px; opacity: 0.3; margin-bottom: 15px;">
-            <h3 style="color: var(--text-muted); margin-top: 0;">You haven't placed any orders yet.</h3>
-            <p>Explore our latest flagship devices and gear.</p>
-            <a href="/products.php" class="btn-primary" style="display: inline-block; margin-top: 15px; text-decoration: none;">Shop Now</a>
-        </div>
-    <?php else: ?>
-        <div style="margin-top: 20px;">
-            <?php foreach ($orders as $order): ?>
-                <?php $status_class = strtolower($order['status']); ?>
-                <div class="card" style="margin-bottom: 25px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); box-shadow: none;">
-                    
-                    <div style="background: #f8f9fa; padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-                        <div>
-                            <strong style="font-size: 16px;">Order #<?php echo $order['id']; ?></strong>
-                            <span style="color: var(--text-muted); font-size: 14px; margin-left: 10px;">
-                                Placed on <?php echo date('d M Y, H:i', strtotime($order['created_at'])); ?>
-                            </span>
-                        </div>
-                        <div>
-                            <span class="status-badge status-<?php echo $status_class; ?>"><?php echo $order['status']; ?></span>
-                        </div>
-                    </div>
+<?php else: ?>
 
-                    <div style="padding: 0 20px;">
-                        <?php if (isset($order_items[$order['id']])): ?>
-                            <?php foreach ($order_items[$order['id']] as $item): ?>
-                                <?php 
-                                    $image_path = $item['image'] === 'default-product.png' ? '/assets/images/default-product.png' : '/assets/uploads/products/' . htmlspecialchars($item['image']);
-                                ?>
-                                <div style="display: flex; align-items: center; padding: 15px 0; border-bottom: 1px dashed #eaeaea;">
-                                    <img src="<?php echo $image_path; ?>" alt="Product" style="width: 60px; height: 60px; object-fit: contain; background: #f9f9f9; border-radius: 4px; border: 1px solid var(--border);">
-                                    <div style="margin-left: 15px; flex: 1;">
-                                        <strong style="font-size: 15px;"><?php echo htmlspecialchars($item['name']); ?></strong>
-                                        <div style="color: var(--text-muted); font-size: 14px; margin-top: 4px;">Qty: <?php echo $item['quantity']; ?></div>
-                                    </div>
-                                    <div style="font-weight: bold; color: var(--primary);">
-                                        RM <?php echo number_format($item['price_at_purchase'], 2); ?>
-                                    </div>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
+    <div class="section-margin-top">
+    <?php foreach ($orders as $order): ?>
+        <?php $canCancel = member_can_cancel($order['status']); ?>
 
-                    <div style="padding: 15px 20px; background: #fff; display: flex; justify-content: space-between; align-items: center;">
-                        <div style="font-size: 13px; color: var(--text-muted); max-width: 60%;">
-                            <strong>Shipping to:</strong><br>
-                            <?php echo nl2br(htmlspecialchars($order['shipping_address'])); ?>
-                        </div>
-                        <div style="text-align: right; font-size: 16px;">
-                            Order Total: <strong style="color: var(--primary); font-size: 20px; margin-left: 10px;">RM <?php echo number_format($order['total_amount'], 2); ?></strong>
-                        </div>
-                    </div>
-                    
+        <div class="card order-card">
+
+            <div class="order-card-head">
+                <div>
+                    <a href="/order_detail.php?id=<?= (int)$order['id'] ?>" class="order-number">
+                        Order #<?= (int)$order['id'] ?>
+                    </a>
+                    <span class="muted">Placed on <?= e(fmt_datetime($order['created_at'])) ?></span>
                 </div>
-            <?php endforeach; ?>
+                <span class="status-badge status-<?= e($order['status']) ?>">
+                    <?= e(order_status_label($order['status'])) ?>
+                </span>
+            </div>
+
+            <?php if ($order['status'] === 'cancelled'): ?>
+                <div class="order-cancel-strip">
+                    <i class="fas fa-ban"></i>
+                    Cancelled<?= !empty($order['cancelled_at']) ? ' on ' . e(fmt_datetime($order['cancelled_at'])) : '' ?>
+                    &mdash; <?= e(cancel_reason_label($order['cancel_reason'] ?? null)) ?>
+                </div>
+            <?php endif; ?>
+
+            <div class="order-card-body">
+                <?php foreach ($orderItems[$order['id']] ?? [] as $item): ?>
+                    <div class="order-line">
+                        <img src="<?= e(product_image($item['image'])) ?>" alt="<?= e($item['name']) ?>" class="order-thumb">
+                        <div class="order-line-info">
+                            <strong><?= e($item['name']) ?></strong>
+                            <div class="muted">Qty: <?= (int)$item['quantity'] ?></div>
+                        </div>
+                        <div class="price"><?= e(money($item['price_at_purchase'])) ?></div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+
+            <div class="order-card-foot">
+                <div class="muted shipping-block">
+                    <strong>Shipping to:</strong><br>
+                    <?= nl2br(e($order['shipping_address'])) ?>
+                </div>
+
+                <div class="order-card-total">
+                    <a href="/order_detail.php?id=<?= (int)$order['id'] ?>" class="btn-outline btn-sm">
+                        View Detail
+                    </a>
+
+                    <a href="/receipt.php?id=<?= (int)$order['id'] ?>" class="btn-outline btn-sm">
+                        Receipt
+                    </a>
+
+                    <?php if ($canCancel): ?>
+                        <a href="/order_cancel.php?id=<?= (int)$order['id'] ?>"
+                           class="btn-outline btn-sm btn-danger">Cancel Order</a>
+                    <?php endif; ?>
+
+                    <?php if ((float)($order['discount_amount'] ?? 0) > 0): ?>
+                        <span class="badge badge-success saved-badge">
+                            Saved <?= e(money($order['discount_amount'])) ?>
+                        </span>
+                    <?php endif; ?>
+
+                    <span>Order Total:</span>
+                    <strong class="price price-lg"><?= e(money($order['total_amount'])) ?></strong>
+                </div>
+            </div>
+
         </div>
-    <?php endif; ?>
-</div>
+
+    <?php endforeach; ?>
+    </div>
+
+<?php endif; ?>
 
 <?php include __DIR__ . '/includes/footer.php'; ?>

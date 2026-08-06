@@ -1,13 +1,16 @@
-  </main>
-  <footer class="bottombar">
+<?php
+// ============================================================
+// includes/footer.php - storefront layout (bottom half)
+// Closes the <main> opened by includes/header.php
+// ============================================================
+?>
+</main>
+
+<footer class="site-footer">
     <div class="container">
-      <div class="footer-links">
-        <a href="/about.php">About</a> |
-        <a href="/contact.php">Contact</a> |
-        <a href="/terms.php">Terms</a>
-      </div>
-      <p class="copyright">&copy; <?php echo date('Y'); ?> Mobile2U. All rights reserved.</p>
+        <p>&copy; <?= date('Y') ?> <?= e(APP_NAME) ?>. BMIT2013 Web-Based Integrated Systems assignment project.</p>
     </div>
-  </footer>
+</footer>
+
 </body>
 </html>

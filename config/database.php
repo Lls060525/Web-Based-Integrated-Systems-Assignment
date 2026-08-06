@@ -1,21 +1,13 @@
 <?php
-// config/database.php
-$host = '127.0.0.1';
-$db   = 'mobile2u';
-$user = 'root';
-$pass = '';
-$charset = 'utf8mb4';
+// ============================================================
+// config/database.php  (compatibility shim)
+//
+// The database connection now lives in lib/db.php and all
+// configuration lives in lib/config.php.
+// This file only remains so that any older include keeps working.
+// New code should require lib/init.php instead.
+// ============================================================
 
-$dsn = "mysql:host=$host;dbname=$db;charset=$charset";
-$options = [
-    PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES   => false,
-];
+require_once __DIR__ . '/../lib/init.php';
 
-try {
-    $pdo = new PDO($dsn, $user, $pass, $options);
-} catch (\PDOException $e) {
-    die("Database connection failed: " . $e->getMessage());
-}
-?>
+$pdo = db();

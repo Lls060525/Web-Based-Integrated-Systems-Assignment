@@ -1,18 +1,12 @@
 <?php
-// Start the session to access session variables
-session_start();
+// ============================================================
+// index.php - entry point, routes the visitor to the right area
+// ============================================================
 
-// Check if the user is logged in
-if (!isset($_SESSION['user_id'])) {
-    // User is NOT logged in, route them to the login page
-    header('Location: /auth/login.php');
-    exit;
+require_once __DIR__ . '/lib/init.php';
+
+if (!is_logged_in()) {
+    redirect('/products.php');   // guests can still browse the catalogue
 }
 
-// User IS logged in, route them to their respective packages
-if (isset($_SESSION['role']) && $_SESSION['role'] === 'admin') {
-    header('Location: /admin/members.php');
-} else {
-    header('Location: /member/home.php');
-}
-exit;
+redirect(home_url_for_role(current_role()));

@@ -1,92 +1,192 @@
 <?php
+// ============================================================
+// admin/order_detail.php - Order Detail (Admin)
+// ============================================================
+
 require_once __DIR__ . '/admin_auth.php';
+require_once __DIR__ . '/../includes/order_parts.php';
 
-$order_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-if (!$order_id) die("Invalid Order ID.");
+$orderId = get_int('id');
 
-// 1. 查询订单主体信息
-$stmt = $pdo->prepare("
-    SELECT o.*, u.name as customer_name, u.email as customer_email, u.profile_photo 
-    FROM orders o JOIN users u ON o.user_id = u.id 
-    WHERE o.id = ?
-");
-$stmt->execute([$order_id]);
-$order = $stmt->fetch();
-if (!$order) die("Order not found.");
+if ($orderId === null) {
+    flash_error('Invalid order id.');
+    redirect('/admin/orders.php');
+}
 
-// 2. 查询订单包含的商品明细
-$item_stmt = $pdo->prepare("
-    SELECT oi.*, p.name as product_name, p.image 
-    FROM order_items oi 
-    JOIN products p ON oi.product_id = p.id 
-    WHERE oi.order_id = ?
-");
-$item_stmt->execute([$order_id]);
-$items = $item_stmt->fetchAll();
+$order = db_one(
+    'SELECT o.*, u.id AS customer_id, u.name AS customer_name,
+            u.email AS customer_email, u.profile_photo
+       FROM orders o
+       JOIN users u ON u.id = o.user_id
+      WHERE o.id = ?',
+    [$orderId]
+);
+
+if (!$order) {
+    flash_error('Order not found.');
+    redirect('/admin/orders.php');
+}
+
+// ---------- Status update, handled here so we stay on this page ----------
+if (is_post()) {
+    csrf_check();
+
+    if (post('action') === 'update_status') {
+        $newStatus = post('status');
+        $note      = post('status_note');
+
+        if ($newStatus === '' || !in_array($newStatus, ORDER_STATUSES, true)) {
+            add_err('status', 'Please choose a status.');
+        } elseif (mb_strlen($note) > 500) {
+            add_err('status_note', 'The note must not exceed 500 characters.');
+        } else {
+            try {
+                update_order_status($orderId, $newStatus, 'admin', $note);
+                flash_success('Order #' . $orderId . ' is now ' . order_status_label($newStatus) . '.');
+                redirect('/admin/order_detail.php?id=' . $orderId);
+
+            } catch (\RuntimeException $ex) {
+                add_err('status', $ex->getMessage());
+
+            } catch (\Throwable $ex) {
+                error_log('Order status update failed: ' . $ex->getMessage());
+                add_err('status', 'Could not update the order. Please try again.');
+            }
+        }
+    }
+
+    // Re-read so the page reflects whatever actually happened.
+    $order = db_one(
+        'SELECT o.*, u.id AS customer_id, u.name AS customer_name,
+                u.email AS customer_email, u.profile_photo
+           FROM orders o JOIN users u ON u.id = o.user_id
+          WHERE o.id = ?',
+        [$orderId]
+    );
+}
+
+$items       = order_lines($orderId);
+$history     = order_status_history($orderId);
+$nextOptions = next_status_options($order['status']);
 
 $title = 'Order #' . $order['id'] . ' - Admin';
-include __DIR__ . '/../includes/header.php';
-$status_class = strtolower($order['status']);
+
+include __DIR__ . '/../includes/admin_header.php';
 ?>
 
-<div class="admin-container" style="max-width: 900px;">
+<div class="admin-container admin-container-wide">
     <div class="admin-header">
-        <h2>Order Details #<?php echo $order['id']; ?></h2>
-        <a href="orders.php" class="btn-outline">&larr; Back to Orders</a>
+        <h2>Order Details #<?= (int)$order['id'] ?></h2>
+        <a href="/admin/orders.php" class="btn-outline">&larr; Back to Orders</a>
     </div>
 
+    <?php err_summary(); ?>
+    <?php render_cancellation_panel($order, 'admin'); ?>
+
     <div class="profile-layout mt-4">
-        <aside class="profile-sidebar" style="width: 300px;">
-            <div class="card" style="padding: 20px; box-shadow: none; border: 1px solid var(--border);">
-                <h3 style="margin-top: 0; font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">Customer</h3>
-                <p><strong><?php echo htmlspecialchars($order['customer_name']); ?></strong><br>
-                <a href="mailto:<?php echo htmlspecialchars($order['customer_email']); ?>"><?php echo htmlspecialchars($order['customer_email']); ?></a></p>
-                
-                <h3 style="margin-top: 25px; font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">Shipping Address</h3>
-                <p style="line-height: 1.5; color: var(--text-muted);"><?php echo nl2br(htmlspecialchars($order['shipping_address'])); ?></p>
-                
-                <h3 style="margin-top: 25px; font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">Order Status</h3>
-                <span class="status-badge status-<?php echo $status_class; ?>" style="font-size: 14px; padding: 6px 12px;"><?php echo $order['status']; ?></span>
+
+        <aside class="profile-sidebar">
+            <div class="card card-padded">
+                <h3 class="side-heading">Customer</h3>
+                <p>
+                    <strong><?= e($order['customer_name']) ?></strong><br>
+                    <a href="mailto:<?= e($order['customer_email']) ?>"><?= e($order['customer_email']) ?></a><br>
+                    <a href="/admin/member_detail.php?id=<?= (int)$order['customer_id'] ?>">View member profile</a>
+                </p>
+
+                <h3 class="side-heading">Placed On</h3>
+                <p class="muted"><?= e(fmt_datetime($order['created_at'])) ?></p>
+
+                <h3 class="side-heading">Shipping Address</h3>
+                <p class="muted"><?= nl2br(e($order['shipping_address'])) ?></p>
+
+                <h3 class="side-heading">Receipt</h3>
+                <div class="receipt-actions">
+                    <a href="/receipt.php?id=<?= (int)$order['id'] ?>" class="btn-outline btn-block">
+                        View Receipt
+                    </a>
+
+                    <?php if (pdf_engine_available()): ?>
+                        <a href="/receipt.php?id=<?= (int)$order['id'] ?>&amp;mode=pdf"
+                           class="btn-outline btn-block mt-2">Download PDF</a>
+                    <?php endif; ?>
+
+                    <?php if (can_resend_receipt($order)): ?>
+                        <form action="/receipt.php?id=<?= (int)$order['id'] ?>&amp;mode=send" method="POST"
+                              class="mt-2" data-confirm="Email this receipt to the customer?">
+                            <?php csrf_field(); ?>
+                            <?php html_submit('Email To Customer', ['class' => 'btn-outline btn-block']); ?>
+                        </form>
+                    <?php endif; ?>
+
+                    <p class="muted small-note mt-2">
+                        <?php if (!empty($order['receipt_sent_at'])): ?>
+                            Sent <?= (int)($order['receipt_sent_count'] ?? 0) ?> time(s),
+                            last on <?= e(fmt_datetime($order['receipt_sent_at'])) ?>.
+                        <?php else: ?>
+                            Not sent yet.
+                        <?php endif; ?>
+                    </p>
+                </div>
+
+                <h3 class="side-heading">Order Status</h3>
+
+                <p>
+                    <span class="status-badge status-<?= e($order['status']) ?>">
+                        <?= e(order_status_label($order['status'])) ?>
+                    </span>
+                </p>
+
+                <?php if (count($nextOptions) === 0): ?>
+                    <p class="muted small-note">
+                        This order is <?= e(order_status_label($order['status'])) ?> and has reached
+                        the end of the workflow. Its status can no longer be changed.
+                    </p>
+                <?php else: ?>
+                    <form action="/admin/order_detail.php?id=<?= (int)$order['id'] ?>"
+                          method="POST" class="form-standard">
+                        <?php csrf_field(); ?>
+                        <?php html_hidden('action', 'update_status'); ?>
+                        <?php html_hidden('order_id', $order['id']); ?>
+
+                        <?php field('status', 'Move this order to', function () use ($nextOptions) {
+                            html_select('status', $nextOptions, '', ['required' => true],
+                                        '-- Select new status --');
+                        }, true); ?>
+
+                        <?php field('status_note', 'Internal note (optional)', function () {
+                            html_textarea('status_note', '', [
+                                'rows'        => 3,
+                                'maxlength'   => 500,
+                                'placeholder' => 'e.g. courier tracking number, or why it was cancelled',
+                            ]);
+                        }); ?>
+
+                        <?php html_submit('Update Status', ['class' => 'btn-primary btn-block']); ?>
+                    </form>
+
+                    <p class="muted small-note mt-2">
+                        Allowed next steps:
+                        <?= e(status_options_label(allowed_next_statuses($order['status']))) ?>.
+                    </p>
+                <?php endif; ?>
             </div>
         </aside>
 
         <main class="profile-content">
-            <div class="card" style="padding: 20px;">
-                <h3 style="margin-top: 0; font-size: 18px; margin-bottom: 20px;">Purchased Items</h3>
-                <table class="admin-table">
-                    <thead>
-                        <tr>
-                            <th colspan="2">Product</th>
-                            <th>Unit Price</th>
-                            <th>Qty</th>
-                            <th>Subtotal</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($items as $item): ?>
-                            <?php 
-                            $image_path = $item['image'] === 'default-product.png' ? '/assets/images/default-product.png' : '/assets/uploads/products/' . htmlspecialchars($item['image']);
-                            $subtotal = $item['price_at_purchase'] * $item['quantity'];
-                            ?>
-                            <tr>
-                                <td width="60">
-                                    <img src="<?php echo $image_path; ?>" alt="Product" style="width: 50px; height: 50px; object-fit: contain; background: #f9f9f9; border-radius: 4px;">
-                                </td>
-                                <td><strong><?php echo htmlspecialchars($item['product_name']); ?></strong></td>
-                                <td>RM <?php echo number_format($item['price_at_purchase'], 2); ?></td>
-                                <td>x <?php echo $item['quantity']; ?></td>
-                                <td><strong>RM <?php echo number_format($subtotal, 2); ?></strong></td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-                
-                <div style="text-align: right; margin-top: 20px; font-size: 18px; padding-top: 20px; border-top: 1px solid var(--border);">
-                    Total Amount Paid: <strong style="color: var(--primary); font-size: 24px; margin-left: 15px;">RM <?php echo number_format($order['total_amount'], 2); ?></strong>
-                </div>
+            <div class="card card-padded">
+                <h3>Purchased Items</h3>
+
+                <?php render_order_lines($items, (float)$order['total_amount'], $order); ?>
+            </div>
+
+            <div class="card card-padded mt-4">
+                <h3>Status History</h3>
+                <p class="muted small-note">Every status change, who made it and when.</p>
+                <?php render_status_timeline($history, 'admin'); ?>
             </div>
         </main>
     </div>
 </div>
 
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include __DIR__ . '/../includes/admin_footer.php'; ?>

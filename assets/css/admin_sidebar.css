@@ -1,0 +1,296 @@
+/* assets/css/admin_sidebar.css */
+body {
+    margin: 0;
+    padding: 0;
+    overflow-x: hidden;
+    background-color: #f4f6f9;
+}
+
+.admin-wrapper {
+    display: flex;
+    min-height: 100vh;
+}
+
+.admin-sidebar {
+    width: 250px;
+    background-color: #343a40; /* 深色侧边栏 */
+    color: #fff;
+    transition: margin 0.3s ease;
+    flex-shrink: 0;
+    z-index: 1000;
+}
+
+.admin-sidebar.collapsed {
+    margin-left: -250px;
+}
+
+.admin-sidebar .sidebar-brand {
+    padding: 15px 20px;
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 1px solid #4f5962;
+    color: #F05123; /* 你的品牌色 */
+    text-decoration: none;
+    display: block;
+}
+
+.admin-sidebar .nav-link {
+    color: #c2c7d0;
+    padding: 12px 20px;
+    display: block;
+    text-decoration: none;
+    transition: background 0.2s, color 0.2s;
+}
+
+.admin-sidebar .nav-link:hover, 
+.admin-sidebar .nav-link.active {
+    background-color: #495057;
+    color: #fff;
+}
+
+.admin-main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    transition: width 0.3s ease;
+}
+
+.admin-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    z-index: 999;
+}
+
+.toggle-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #6c757d;
+}
+
+/* =========================================
+   Profile Page Layout (Admin & Member)
+   ========================================= */
+.profile-layout {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+.profile-sidebar {
+    width: 300px;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    padding: 30px 0;
+    flex-shrink: 0;
+}
+.profile-content {
+    flex: 1;
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    padding: 40px;
+}
+
+/* Sidebar Image Area */
+.profile-img-container {
+    text-align: center;
+    padding: 0 20px 20px 20px;
+    border-bottom: 1px solid #eee;
+}
+.profile-img {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    object-fit: cover;
+    background-color: #d122e3;
+    margin-bottom: 15px;
+    border: 2px solid #fff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+}
+.btn-select-image {
+    display: inline-block;
+    padding: 8px 16px;
+    border: 1px solid #ddd;
+    background: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #555;
+    transition: all 0.2s;
+}
+.btn-select-image:hover {
+    background: #f9f9f9;
+    border-color: #ccc;
+}
+
+/* Sidebar Navigation */
+.profile-nav {
+    display: flex;
+    flex-direction: column;
+    padding: 20px 15px;
+    gap: 5px;
+}
+.profile-nav-item {
+    padding: 12px 20px;
+    text-decoration: none;
+    color: #333;
+    font-size: 16px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+.profile-nav-item:hover {
+    background-color: #f8f9fa;
+}
+.profile-nav-item.active {
+    background-color: #fdf2ef;
+    color: #ef5332;
+    font-weight: 500;
+}
+
+/* Content Area Forms */
+.content-title {
+    font-size: 24px;
+    font-weight: bold;
+    margin-top: 0;
+    margin-bottom: 5px;
+    color: #222;
+}
+.content-subtitle {
+    color: #777;
+    font-size: 14px;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid #eee;
+}
+.form-group {
+    margin-bottom: 20px;
+}
+.form-group label {
+    display: block;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: #333;
+}
+.form-control {
+    width: 100%;
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 15px;
+    color: #333;
+    transition: border-color 0.2s;
+}
+.form-control:focus {
+    border-color: #ef5332;
+    outline: none;
+}
+.btn-submit-orange {
+    background-color: #ef5332;
+    color: #fff;
+    border: none;
+    padding: 14px;
+    width: 100%;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.btn-submit-orange:hover {
+    background-color: #d84526;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .profile-layout {
+        flex-direction: column;
+    }
+    .profile-sidebar, .profile-content {
+        width: 100%;
+    }
+}
+/* ============================================================
+   Additions for the refactored admin layout.
+   Replaces the inline style="..." attributes that used to live
+   in includes/admin_header.php.
+   ============================================================ */
+
+.admin-main { padding: 20px; }
+
+.toggle-btn {
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: var(--text-main, #333);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.toggle-btn:hover { background: #f0f2f5; }
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-left: auto;
+}
+
+.topbar-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: #333;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: background .2s ease;
+}
+.topbar-profile:hover { background: #f0f2f5; }
+
+.topbar-avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #ddd;
+  background: #fafafa;
+}
+
+.topbar-name { font-weight: 500; font-size: 15px; }
+
+.topbar-divider {
+  height: 24px;
+  border-left: 1px solid #ddd;
+}
+
+.topbar-logout {
+  color: #e74c3c;
+  font-size: 18px;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  padding: 6px;
+  border-radius: 4px;
+}
+.topbar-logout:hover { background: #fdecea; }
+
+/* Active sidebar entry */
+.sidebar-nav .nav-link.active {
+  background: rgba(255, 255, 255, .14);
+  font-weight: 600;
+}
+.sidebar-nav .nav-link i { width: 18px; text-align: center; margin-right: 10px; }
+
+/* Collapsed sidebar hides the labels, keeps the icons */
+.admin-sidebar.collapsed .nav-label,
+.admin-sidebar.collapsed .sidebar-brand { display: none; }

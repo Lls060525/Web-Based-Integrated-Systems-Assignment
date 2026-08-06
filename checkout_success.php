@@ -1,108 +1,231 @@
 <?php
-// checkout_success.php
-session_start();
-require_once __DIR__ . '/vendor/autoload.php';
-require_once __DIR__ . '/config/database.php';
+// ============================================================
+// checkout_success.php - Stripe success callback.
+// Verifies the payment with Stripe, then creates the order
+// inside a transaction so stock and cart stay consistent.
+// ============================================================
 
-// 1. Authentication and parameter validation
-if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role'] !== 'member')) {
-    header('Location: /auth/login.php');
-    exit;
+require_once __DIR__ . '/lib/init.php';
+
+require_member();
+
+$userId    = current_user_id();
+$sessionId = get('session_id');
+
+if ($sessionId === '') {
+    redirect('/cart.php');
 }
 
-$user_id = $_SESSION['user_id'];
-$session_id = filter_input(INPUT_GET, 'session_id', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
-
-if (!$session_id) {
-    header('Location: /cart.php');
-    exit;
-}
-
-\Stripe\Stripe::setApiKey('api_key_here'); // Replace with your actual Stripe secret key
+\Stripe\Stripe::setApiKey(STRIPE_SECRET_KEY);
 
 try {
-    // 2. Verify checkout session payment status from Stripe to prevent spoofing
-    $session = \Stripe\Checkout\Session::retrieve($session_id);
+    // ---------- 1. Verify with Stripe, never trust the query string ----------
+    $session = \Stripe\Checkout\Session::retrieve($sessionId);
+
     if ($session->payment_status !== 'paid') {
-        throw new Exception("Payment not verified as paid by Stripe.");
+        throw new RuntimeException('Payment was not completed.');
     }
 
-    // Format shipping address collected by Stripe
-    $shipping = $session->shipping_details->address;
-    $shipping_address = trim("{$shipping->line1} {$shipping->line2}\n{$shipping->postal_code} {$shipping->city}, {$shipping->state}, {$shipping->country}");
-
-    // ==========================================
-    // Begin Database Transaction 
-    // Ensure atomic operations for orders, stock, and cart
-    // ==========================================
-    $pdo->beginTransaction();
-
-    // 3. Lock user's cart data (Pessimistic lock with FOR UPDATE to prevent race conditions)
-    $stmt = $pdo->prepare("
-        SELECT c.product_id, c.quantity, p.price, p.stock 
-        FROM cart c 
-        JOIN products p ON c.product_id = p.id 
-        WHERE c.user_id = ? FOR UPDATE
-    ");
-    $stmt->execute([$user_id]);
-    $cart_items = $stmt->fetchAll();
-
-    if (empty($cart_items)) {
-        // Cart is empty. User might have refreshed the success page. Rollback and redirect.
-        $pdo->rollBack();
-        header('Location: /orders.php');
-        exit;
+    // The session must belong to the member who is logged in.
+    if ((string)$session->client_reference_id !== (string)$userId) {
+        throw new RuntimeException('This payment session does not belong to your account.');
     }
 
-    $total_amount = 0;
-    foreach ($cart_items as $item) {
-        $total_amount += ($item['price'] * $item['quantity']);
-    }
+    // ---------- 2. Never create the same order twice ----------
+    // The column arrives with database/migration_password_reset.sql.
+    // Until then the duplicate guard is simply skipped.
+    $hasSessionColumn = db_column_exists('orders', 'stripe_session_id');
 
-    // 4. Generate main order record
-    $stmt = $pdo->prepare("INSERT INTO orders (user_id, total_amount, status, shipping_address) VALUES (?, ?, 'Pending', ?)");
-    $stmt->execute([$user_id, $total_amount, $shipping_address]);
-    $order_id = $pdo->lastInsertId();
-
-    // 5. Deduct stock and generate order items
-    $insert_item_stmt = $pdo->prepare("INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase) VALUES (?, ?, ?, ?)");
-    $update_stock_stmt = $pdo->prepare("UPDATE products SET stock = stock - ? WHERE id = ? AND stock >= ?");
-
-    foreach ($cart_items as $item) {
-        // Record price at the time of purchase (price snapshot)
-        $insert_item_stmt->execute([$order_id, $item['product_id'], $item['quantity'], $item['price']]);
-        
-        // Optimistic locking for stock reduction. If rowCount is 0, stock was depleted concurrently.
-        $update_stock_stmt->execute([$item['quantity'], $item['product_id'], $item['quantity']]);
-        if ($update_stock_stmt->rowCount() === 0) {
-            throw new Exception("Race condition detected: Insufficient stock for Product ID {$item['product_id']} during finalization.");
+    if ($hasSessionColumn) {
+        $existing = db_value('SELECT id FROM orders WHERE stripe_session_id = ?', [$sessionId]);
+        if ($existing) {
+            flash_success('Your order #' . $existing . ' is already confirmed.');
+            redirect('/orders.php');
         }
     }
 
-    // 6. Clear the user's cart
-    $stmt = $pdo->prepare("DELETE FROM cart WHERE user_id = ?");
-    $stmt->execute([$user_id]);
+    // ---------- Shipping address ----------
+    // The address comes from the member's own address book, carried
+    // across in Stripe metadata. We re-check ownership here rather
+    // than trusting the value that came back over the wire.
+    $addressId = isset($session->metadata->address_id)
+        ? (int)$session->metadata->address_id
+        : null;
 
-    // 7. Commit transaction
-    $pdo->commit();
+    $address     = $addressId === null ? null : find_user_address($addressId, $userId);
+    $shipping    = $address ? format_address($address) : 'No shipping address recorded';
+    $hasAddressId = db_column_exists('orders', 'shipping_address_id');
 
-    $_SESSION['success_msg'] = "Payment successful! Your Order #{$order_id} has been securely placed.";
-    header('Location: /orders.php');
-    exit;
+    // ---------- 3. Create the order atomically ----------
+    db()->beginTransaction();
+
+    // FOR UPDATE locks the rows so two tabs cannot both spend the same stock.
+    $items = db_all(
+        'SELECT c.product_id, c.quantity, p.price, p.stock
+           FROM cart c
+           JOIN products p ON p.id = c.product_id
+          WHERE c.user_id = ?
+          FOR UPDATE',
+        [$userId]
+    );
+
+    if (count($items) === 0) {
+        db()->rollBack();
+        flash_success('Your order has already been recorded.');
+        redirect('/orders.php');
+    }
+
+    $subtotal = 0.0;
+    foreach ($items as $item) {
+        $subtotal += $item['price'] * $item['quantity'];
+    }
+
+    // ---------- Voucher ----------
+    // Revalidated here, not trusted from the session or from Stripe.
+    // Between the payment page and this callback someone else may have
+    // taken the last remaining use, so the checks run again.
+    $voucherCode = $session->metadata->voucher_code ?? '';
+    $applied     = $voucherCode === '' ? null : check_voucher($voucherCode, $userId, $subtotal);
+    $voucher     = ($applied !== null && $applied['ok']) ? $applied['voucher'] : null;
+    $discount    = $voucher !== null ? $applied['discount'] : 0.0;
+    $afterVoucher = round($subtotal - $discount, 2);
+
+    // ---------- Reward points ----------
+    // Revalidated, like everything else. The balance may have changed
+    // while the member was on Stripe's page.
+    $wantPoints     = (int)($session->metadata->redeem_points ?? 0);
+    $pointsCheck    = $wantPoints > 0
+        ? check_points_redemption($userId, $wantPoints, $afterVoucher)
+        : null;
+    $usePoints      = ($pointsCheck !== null && $pointsCheck['ok']) ? $pointsCheck['points'] : 0;
+    $pointsDiscount = $usePoints > 0 ? $pointsCheck['discount'] : 0.0;
+
+    $total = round($afterVoucher - $pointsDiscount, 2);
+
+    $hasVoucherCols = db_column_exists('orders', 'discount_amount');
+    $hasPointsCols  = db_column_exists('orders', 'points_redeemed');
+
+    // Build the INSERT from whichever optional columns exist, so the
+    // checkout keeps working whether or not every migration has been run.
+    $columns = ['user_id', 'total_amount', 'status', 'shipping_address'];
+    $values  = [$userId, $total, 'pending', $shipping];
+
+    if ($hasSessionColumn) {
+        $columns[] = 'stripe_session_id';
+        $values[]  = $sessionId;
+    }
+
+    if ($hasAddressId && $address !== null) {
+        $columns[] = 'shipping_address_id';
+        $values[]  = $address['id'];
+    }
+
+    if ($hasPointsCols) {
+        $columns[] = 'points_redeemed';
+        $values[]  = $usePoints;
+
+        $columns[] = 'points_discount';
+        $values[]  = $pointsDiscount;
+    }
+
+    if ($hasVoucherCols) {
+        $columns[] = 'subtotal';
+        $values[]  = $subtotal;
+
+        $columns[] = 'discount_amount';
+        $values[]  = $discount;
+
+        if ($voucher !== null) {
+            $columns[] = 'voucher_id';
+            $values[]  = $voucher['id'];
+
+            // Text snapshot, so a renamed or deleted voucher does not
+            // rewrite what the receipt says was used.
+            $columns[] = 'voucher_code';
+            $values[]  = $voucher['code'];
+        }
+    }
+
+    $placeholders = implode(', ', array_fill(0, count($columns), '?'));
+
+    db_exec(
+        'INSERT INTO orders (' . implode(', ', $columns) . ') VALUES (' . $placeholders . ')',
+        $values
+    );
+
+    $orderId = db_last_id();
+
+    foreach ($items as $item) {
+        db_exec(
+            'INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase)
+             VALUES (?, ?, ?, ?)',
+            [$orderId, $item['product_id'], $item['quantity'], $item['price']]
+        );
+
+        // deduct_stock() does the conditional UPDATE and writes the
+        // movement ledger entry. It throws if another order took the
+        // last units first, which rolls this whole transaction back.
+        deduct_stock((int)$item['product_id'], (int)$item['quantity'], (int)$orderId);
+    }
+
+    // Claim the voucher inside the same transaction as the order, so a
+    // usage limit hit rolls the whole thing back rather than leaving a
+    // discounted order behind.
+    if ($voucher !== null && $hasVoucherCols) {
+        redeem_voucher((int)$voucher['id'], $userId, (int)$orderId, $discount);
+    }
+
+    // Spend the points inside the same transaction. If the balance no
+    // longer covers it, the exception rolls the whole order back rather
+    // than letting someone spend points they do not have.
+    if ($usePoints > 0) {
+        redeem_points($userId, $usePoints, (int)$orderId, $pointsDiscount);
+    }
+
+    // Award points on what was actually paid, not on the pre-discount
+    // subtotal, so a discount cannot be farmed for extra points.
+    $earned = award_points_for_order($userId, (int)$orderId, $total);
+
+    if ($earned > 0 && $hasPointsCols) {
+        db_exec('UPDATE orders SET points_earned = ? WHERE id = ?', [$earned, $orderId]);
+    }
+
+    db_exec('DELETE FROM cart WHERE user_id = ?', [$userId]);
+
+    log_status_change((int)$orderId, null, 'pending', 'member', 'Order placed and paid.');
+
+    db()->commit();
+
+    clear_voucher_session();
+    clear_points_session();
+
+    // ---------- 4. E-Receipt ----------
+    // Sent after the commit so a mail problem can never roll back a
+    // paid order. Failure is logged and the member can resend later.
+    try {
+        send_receipt_email((int)$orderId);
+    } catch (\Throwable $mailError) {
+        error_log('Receipt email failed for order ' . $orderId . ': ' . $mailError->getMessage());
+    }
+
+    $successMessage = 'Payment successful. Your order #' . $orderId
+                    . ' has been placed and your receipt has been sent.';
+
+    if ($earned > 0) {
+        $successMessage .= ' You earned ' . number_format($earned) . ' reward points.';
+    }
+
+    flash_success($successMessage);
+    redirect('/orders.php');
 
 } catch (\Throwable $e) {
-    // 1. Rollback the database transaction if an error occurs
-    if ($pdo->inTransaction()) {
-        $pdo->rollBack();
+    if (db()->inTransaction()) {
+        db()->rollBack();
     }
-    
-    // 2. Log the exact error
-    error_log("Order Processing Failed: " . $e->getMessage());
-    
-    // 3. TEMPORARY DEBUGGING: Output the exact error message and line number to the screen
-    $_SESSION['error_msg'] = "DEBUG ERROR: " . $e->getMessage() . " (Line: " . $e->getLine() . ")";
-    
-    // 4. Redirect back to cart to show the error
-    header('Location: /cart.php');
-    exit;
+
+    error_log('Order processing failed: ' . $e->getMessage());
+
+    // The visitor gets a safe message; the detail stays in the error log.
+    flash_error('We could not finalise your order. No stock was deducted. Please contact support if you were charged.');
+    redirect('/cart.php');
 }

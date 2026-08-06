@@ -1,13 +1,14 @@
 <?php
-// /auth/logout.php
+// ============================================================
+// auth/logout.php - Logout (Security module)
+// ============================================================
+
+require_once __DIR__ . '/../lib/init.php';
+
+logout_user();
+
+// Start a fresh session purely so the goodbye message can be shown.
 session_start();
+flash_success('You have been logged out.');
 
-// Unset all of the session variables
-$_SESSION = [];
-
-// Destroy the session completely
-session_destroy();
-
-// Redirect back to the login page
-header('Location: /auth/login.php');
-exit;
+redirect('/auth/login.php');

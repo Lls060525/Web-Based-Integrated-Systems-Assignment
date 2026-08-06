@@ -1,212 +1,165 @@
 <?php
-session_start();
+// ============================================================
+// member/profile.php - User Profile module
+// Profile update, password update and profile photo upload.
+// ============================================================
 
-// 真正的安全拦截：未登录踢回登录页
-if (!isset($_SESSION['user_id'])) {
-    header('Location: /auth/login.php');
-    exit;
-}
+require_once __DIR__ . '/../lib/init.php';
 
-$user_id = $_SESSION['user_id'];
-$title = 'My Profile - Mobile2U';
+require_login();
 
-require_once __DIR__ . '/../config/database.php';
+$title  = 'My Profile - ' . APP_NAME;
+$userId = current_user_id();
 
-$success_msg = '';
-$error_msg = '';
+if (is_post()) {
+    csrf_check();
 
-// 2. 处理表单提交 (使用 PRG 模式与 Session Flash Message)
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action = $_POST['action'] ?? '';
+    $action = post('action');
 
-    // --- A. 更新基本资料 ---
+    // ---------- A. Update profile ----------
     if ($action === 'update_profile') {
-        $name = trim($_POST['name'] ?? '');
-        $email = trim($_POST['email'] ?? '');
+        $name  = post('name');
+        $email = post('email');
 
-        if (empty($name) || empty($email)) {
-            $_SESSION['error_msg'] = 'Name and Email are required.';
-        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $_SESSION['error_msg'] = 'Invalid email format.';
-        } else {
-            $stmt = $pdo->prepare("UPDATE users SET name = ?, email = ? WHERE id = ?");
-            if ($stmt->execute([$name, $email, $user_id])) {
-                $_SESSION['success_msg'] = 'Profile updated successfully.';
-            }
+        if (v_required('name', $name, 'Name')) {
+            v_max('name', $name, 100, 'Name');
         }
-    }
+        if (v_required('email', $email, 'Email') && v_email('email', $email)) {
+            v_email_unique('email', $email, $userId);
+        }
 
-    // --- B. 更新密码 ---
-    if ($action === 'update_password') {
-        $current_password = $_POST['current_password'] ?? '';
-        $new_password = $_POST['new_password'] ?? '';
-        $confirm_password = $_POST['confirm_password'] ?? '';
+        if (no_err()) {
+            db_exec('UPDATE users SET name = ?, email = ? WHERE id = ?', [$name, $email, $userId]);
+            flash_success('Profile updated successfully.');
+            redirect('/member/profile.php');
+        }
 
-        if (empty($current_password) || empty($new_password)) {
-            $_SESSION['error_msg'] = 'All password fields are required.';
-        } elseif ($new_password !== $confirm_password) {
-            $_SESSION['error_msg'] = 'New password and confirm password do not match.';
-        } elseif (strlen($new_password) < 6) {
-            $_SESSION['error_msg'] = 'New password must be at least 6 characters.';
-        } else {
-            $stmt = $pdo->prepare("SELECT password_hash FROM users WHERE id = ?");
-            $stmt->execute([$user_id]);
-            $user_data = $stmt->fetch();
+    // ---------- B. Update password ----------
+    } elseif ($action === 'update_password') {
+        $current = post('current_password');
+        $new     = post('new_password');
+        $confirm = post('confirm_password');
 
-            if (password_verify($current_password, $user_data['password_hash'])) {
-                $new_hash = password_hash($new_password, PASSWORD_DEFAULT);
-                $update_stmt = $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?");
-                $update_stmt->execute([$new_hash, $user_id]);
-                $_SESSION['success_msg'] = 'Password changed successfully.';
+        v_required('current_password', $current, 'Current password');
+
+        if (v_password('new_password', $new, 'New password')) {
+            v_same('confirm_password', $confirm, $new, 'Confirm password');
+        }
+
+        if (no_err()) {
+            $hash = db_value('SELECT password_hash FROM users WHERE id = ?', [$userId]);
+
+            if (!password_verify($current, (string)$hash)) {
+                add_err('current_password', 'Your current password is incorrect.');
+            } elseif ($current === $new) {
+                add_err('new_password', 'The new password must be different from the current one.');
             } else {
-                $_SESSION['error_msg'] = 'Incorrect current password.';
+                db_exec(
+                    'UPDATE users SET password_hash = ? WHERE id = ?',
+                    [password_hash($new, PASSWORD_DEFAULT), $userId]
+                );
+
+                // A password change should invalidate any pending reset link.
+                revoke_reset_tokens($userId);
+
+                flash_success('Password changed successfully.');
+                redirect('/member/profile.php');
             }
         }
-    }
 
-    // --- C. 上传头像 ---
-    if ($action === 'upload_photo' && isset($_FILES['profile_photo'])) {
-        $file = $_FILES['profile_photo'];
-        
-        if ($file['error'] === UPLOAD_ERR_OK) {
-            $max_size = 2 * 1024 * 1024; // 2MB
-            $upload_dir = __DIR__ . '/../assets/uploads/avatars/';
-            
-            if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
-
-            if ($file['size'] > $max_size) {
-                $_SESSION['error_msg'] = 'File size exceeds the 2MB limit.';
-            } else {
-                $finfo = finfo_open(FILEINFO_MIME_TYPE);
-                $mime_type = finfo_file($finfo, $file['tmp_name']);
-                finfo_close($finfo);
-
-                $allowed_mimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-                
-                if (in_array($mime_type, $allowed_mimes)) {
-                    $ext = match ($mime_type) {
-                        'image/jpeg' => 'jpg',
-                        'image/png'  => 'png',
-                        'image/gif'  => 'gif',
-                        'image/webp' => 'webp',
-                    };
-
-                    $new_filename = 'avatar_uid' . $user_id . '_' . bin2hex(random_bytes(8)) . '.' . $ext;
-                    $destination = $upload_dir . $new_filename;
-
-                    if (move_uploaded_file($file['tmp_name'], $destination)) {
-                        
-                        $stmt = $pdo->prepare("SELECT profile_photo FROM users WHERE id = ?");
-                        $stmt->execute([$user_id]);
-                        $old_photo = $stmt->fetchColumn();
-                        
-                        if ($old_photo && $old_photo !== 'default-avatar.png') {
-                            $old_path = $upload_dir . $old_photo;
-                            if (file_exists($old_path)) unlink($old_path);
-                        }
-
-                        $stmt = $pdo->prepare("UPDATE users SET profile_photo = ? WHERE id = ?");
-                        $stmt->execute([$new_filename, $user_id]);
-                        
-                        $_SESSION['success_msg'] = 'Profile photo updated successfully.';
-                    } else {
-                        $_SESSION['error_msg'] = 'Server Error: Failed to save the uploaded file.';
-                    }
-                } else {
-                    $_SESSION['error_msg'] = 'Security Alert: Invalid file format.';
-                }
-            }
+    // ---------- C. Upload profile photo ----------
+    } elseif ($action === 'upload_photo') {
+        if (!isset($_FILES['profile_photo']) || $_FILES['profile_photo']['error'] === UPLOAD_ERR_NO_FILE) {
+            add_err('profile_photo', 'Please choose an image first.');
         } else {
-            $_SESSION['error_msg'] = 'Error uploading file. Code: ' . $file['error'];
+            $filename = save_uploaded_image('profile_photo', DIR_UPLOAD_AVATARS, 'avatar_uid' . $userId);
+
+            if ($filename !== null) {
+                $old = db_value('SELECT profile_photo FROM users WHERE id = ?', [$userId]);
+                delete_uploaded_file(DIR_UPLOAD_AVATARS, $old);
+
+                db_exec('UPDATE users SET profile_photo = ? WHERE id = ?', [$filename, $userId]);
+
+                flash_success('Profile photo updated successfully.');
+                redirect('/member/profile.php');
+            }
         }
     }
-
-    // ==========================================
-    // 核心安全逻辑：PRG Pattern (重定向以清除 POST 状态)
-    // ==========================================
-    header('Location: profile.php');
-    exit;
 }
 
-// ==========================================
-// 提取闪存消息 (Flash Messages) 并立刻销毁
-// ==========================================
-$success_msg = $_SESSION['success_msg'] ?? '';
-$error_msg = $_SESSION['error_msg'] ?? '';
-unset($_SESSION['success_msg'], $_SESSION['error_msg']);
-
-// 3. 获取当前用户最新数据渲染页面
-$stmt = $pdo->prepare("SELECT name, email, role, profile_photo FROM users WHERE id = ?");
-$stmt->execute([$user_id]);
-$currentUser = $stmt->fetch();
-
-// 处理默认头像
-$avatar_path = !empty($currentUser['profile_photo']) && $currentUser['profile_photo'] !== 'default-avatar.png' 
-    ? '/assets/uploads/avatars/' . htmlspecialchars($currentUser['profile_photo']) 
-    : '/assets/images/default-avatar.png'; // 你可以在 images 放一个默认图片
+$user   = current_user();
+$avatar = avatar_image($user['profile_photo'] ?? null);
 
 include __DIR__ . '/../includes/header.php';
 ?>
 
 <div class="profile-container">
-    
-    <?php if ($success_msg): ?>
-        <div class="toast-message toast-success"><?php echo htmlspecialchars($success_msg); ?></div>
-    <?php endif; ?>
-    <?php if ($error_msg): ?>
-        <div class="toast-message toast-error"><?php echo htmlspecialchars($error_msg); ?></div>
-    <?php endif; ?>
+
+    <?php err_summary(); ?>
 
     <div class="profile-layout">
-        
+
         <aside class="profile-sidebar">
             <div class="profile-avatar-section">
-                <img src="<?php echo $avatar_path; ?>" alt="Profile Photo" id="avatarPreview" class="avatar-img">
-                <form action="profile.php" method="POST" enctype="multipart/form-data" class="upload-form">
-                    <input type="hidden" name="action" value="upload_photo">
+                <img src="<?= e($avatar) ?>" alt="Profile photo" id="avatarPreview" class="avatar-img">
+
+                <form action="/member/profile.php" method="POST" enctype="multipart/form-data" class="upload-form">
+                    <?php csrf_field(); ?>
+                    <?php html_hidden('action', 'upload_photo'); ?>
+
                     <label class="btn-outline" for="photoInput">Select Image</label>
-                    <input type="file" id="photoInput" name="profile_photo" accept="image/*" style="display:none;">
-                    <button type="submit" class="btn-primary btn-sm mt-2" id="uploadBtn" style="display:none;">Upload</button>
+                    <input type="file" id="photoInput" name="profile_photo" accept="image/*" class="visually-hidden">
+                    <?php html_submit('Upload', ['class' => 'btn-primary btn-sm mt-2', 'id' => 'uploadBtn', 'style' => 'display:none;']); ?>
+                    <?php err('profile_photo'); ?>
                 </form>
             </div>
+
             <nav class="profile-nav">
                 <a href="#profile-info" class="active">My Profile</a>
                 <a href="#profile-password">Change Password</a>
-                <a href="/orders.php">My Orders</a> </nav>
+                <a href="/member/addresses.php">My Addresses</a>
+                <a href="/member/wishlist.php">My Wishlist</a>
+                <a href="/member/points.php">Reward Points</a>
+                <a href="/orders.php">My Orders</a>
+            </nav>
         </aside>
 
         <main class="profile-content">
-            
+
             <div class="card" id="profile-info">
                 <div class="card-header">
                     <h2>My Profile</h2>
-                    <p>Manage and protect your account</p>
+                    <p>Manage and protect your account.</p>
                 </div>
                 <div class="card-body">
-                    <form action="profile.php" method="POST" class="form-standard">
-                        <input type="hidden" name="action" value="update_profile">
-                        
-                        <div class="form-group">
-                            <label>Name</label>
-                            <input type="text" name="name" id="profileName" 
-                                   value="<?php echo htmlspecialchars($currentUser['name']); ?>" 
-                                   data-original="<?php echo htmlspecialchars($currentUser['name']); ?>" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Email Address</label>
-                            <input type="email" name="email" id="profileEmail" 
-                                   value="<?php echo htmlspecialchars($currentUser['email']); ?>" 
-                                   data-original="<?php echo htmlspecialchars($currentUser['email']); ?>" required>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Role</label>
-                            <input type="text" value="<?php echo htmlspecialchars(ucfirst($currentUser['role'])); ?>" readonly>
-                        </div>
-                        
+                    <form action="/member/profile.php" method="POST" class="form-standard">
+                        <?php csrf_field(); ?>
+                        <?php html_hidden('action', 'update_profile'); ?>
+
+                        <?php field('name', 'Name', function () use ($user) {
+                            html_text('name', $user['name'], [
+                                'required'      => true,
+                                'maxlength'     => 100,
+                                'id'            => 'profileName',
+                                'data-original' => $user['name'],
+                            ]);
+                        }, true); ?>
+
+                        <?php field('email', 'Email Address', function () use ($user) {
+                            html_email('email', $user['email'], [
+                                'required'      => true,
+                                'maxlength'     => 100,
+                                'id'            => 'profileEmail',
+                                'data-original' => $user['email'],
+                            ]);
+                        }, true); ?>
+
+                        <?php field('role', 'Role', function () use ($user) {
+                            html_text('role', ucfirst($user['role']), ['readonly' => true, 'disabled' => true]);
+                        }); ?>
+
                         <div class="form-actions text-right">
-                            <button type="submit" class="btn-primary" id="saveProfileBtn" style="display: none;">Save Changes</button>
+                            <?php html_submit('Save Changes', ['id' => 'saveProfileBtn', 'style' => 'display:none;']); ?>
                         </div>
                     </form>
                 </div>
@@ -215,24 +168,27 @@ include __DIR__ . '/../includes/header.php';
             <div class="card mt-4" id="profile-password">
                 <div class="card-header">
                     <h2>Change Password</h2>
-                    <p>For your account's security, do not share your password with anyone else</p>
+                    <p>For your account's security, do not share your password with anyone.</p>
                 </div>
                 <div class="card-body">
-                    <form action="profile.php" method="POST" class="form-standard">
-                        <input type="hidden" name="action" value="update_password">
-                        <div class="form-group">
-                            <label>Current Password</label>
-                            <input type="password" name="current_password" required>
-                        </div>
-                        <div class="form-group">
-                            <label>New Password</label>
-                            <input type="password" name="new_password" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Confirm Password</label>
-                            <input type="password" name="confirm_password" required>
-                        </div>
-                        <button type="submit" class="btn-primary">Update Password</button>
+                    <form action="/member/profile.php" method="POST" class="form-standard">
+                        <?php csrf_field(); ?>
+                        <?php html_hidden('action', 'update_password'); ?>
+
+                        <?php field('current_password', 'Current Password', function () {
+                            html_password('current_password', ['required' => true]);
+                        }, true); ?>
+
+                        <?php field('new_password', 'New Password', function () {
+                            html_password('new_password', ['required' => true]);
+                            echo '<small class="form-hint">At least 8 characters, including a letter and a number.</small>';
+                        }, true); ?>
+
+                        <?php field('confirm_password', 'Confirm New Password', function () {
+                            html_password('confirm_password', ['required' => true]);
+                        }, true); ?>
+
+                        <?php html_submit('Update Password'); ?>
                     </form>
                 </div>
             </div>

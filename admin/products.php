@@ -1,149 +1,96 @@
 <?php
-// /admin/products.php
-require_once __DIR__ . '/../admin/admin_auth.php'; // Enforce admin security
+// ============================================================
+// admin/products.php - Product Listing + Basic Searching (Admin)
+// ============================================================
+
+require_once __DIR__ . '/admin_auth.php';
+require_once __DIR__ . '/../includes/admin_rows.php';
 
 $title = 'Product Management - Admin';
 
-// --- Handle Status Toggle ---
-if (isset($_GET['toggle_status']) && isset($_GET['id'])) {
-    $toggle_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-    $new_status = $_GET['toggle_status'] === 'active' ? 'active' : 'inactive';
+// ---------- Activate / deactivate (POST + CSRF, never a bare GET link) ----------
+if (is_post()) {
+    csrf_check();
 
-    if ($toggle_id) {
-        $stmt = $pdo->prepare("UPDATE products SET status = ? WHERE id = ?");
-        $stmt->execute([$new_status, $toggle_id]);
+    if (post('action') === 'toggle_status') {
+        $id     = post_int('id');
+        $status = post('status');
 
-        // PRG Pattern to clear URL parameters
-        header('Location: /admin/products.php');
-        exit;
+        if ($id === null || !in_array($status, ['active', 'inactive'], true)) {
+            flash_error('Invalid request.');
+        } else {
+            db_exec('UPDATE products SET status = ? WHERE id = ?', [$status, $id]);
+            flash_success('Product has been ' . ($status === 'active' ? 'activated' : 'deactivated') . '.');
+        }
     }
+
+    redirect('/admin/products.php');
 }
 
-// --- Fetch Products ---
-$search_query = trim($_GET['q'] ?? '');
-$sql = "SELECT * FROM products";
+// ---------- Listing ----------
+$q = get('q');
+
+$sql = "SELECT p.*, c.name AS category_name
+          FROM products p
+          LEFT JOIN categories c ON c.id = p.category_id";
 $params = [];
 
-if ($search_query !== '') {
-    $sql .= " WHERE name LIKE ?";
-    $params[] = "%{$search_query}%";
+if ($q !== '') {
+    $sql     .= ' WHERE (p.name LIKE ? OR c.name LIKE ?)';
+    $params[] = '%' . $q . '%';
+    $params[] = '%' . $q . '%';
 }
-$sql .= " ORDER BY created_at DESC";
 
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$products = $stmt->fetchAll();
+$sql .= ' ORDER BY p.id DESC';
 
-if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
-    if (count($products) > 0) {
-        foreach ($products as $p) {
-            ?>
-            <tr>
-                <td>#<?php echo $p['id']; ?></td>
-                <td>
-                    <img src="/assets/images/<?php echo htmlspecialchars($p['image']); ?>" alt="product" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
-                </td>
-                <td><strong><?php echo htmlspecialchars($p['name']); ?></strong></td>
-                <td><?php echo number_format($p['price'], 2); ?></td>
-                <td><?php echo $p['stock']; ?></td>
-                <td>
-                    <?php if ($p['status'] === 'active'): ?>
-                        <span class="badge" style="background: #e6f4ea; color: #1e8e3e;">Active</span>
-                    <?php else: ?>
-                        <span class="badge" style="background: #fce8e6; color: #d93025;">Inactive</span>
-                    <?php endif; ?>
-                </td>
-                <td>
-                    <a href="product_form.php?id=<?php echo $p['id']; ?>" class="btn-outline btn-sm">Edit</a>
+$products = db_all($sql, $params);
 
-                    <?php if ($p['status'] === 'active'): ?>
-                        <a href="products.php?toggle_status=inactive&id=<?php echo $p['id']; ?>" class="btn-outline btn-sm" style="color: #d93025; border-color: #d93025;" onclick="return confirm('Deactivate this product?');">Deactivate</a>
-                    <?php else: ?>
-                        <a href="products.php?toggle_status=active&id=<?php echo $p['id']; ?>" class="btn-outline btn-sm" style="color: #1e8e3e; border-color: #1e8e3e;">Activate</a>
-                    <?php endif; ?>
-                </td>
-            </tr>
-            <?php
-        }
-    } else {
-        echo '<tr><td colspan="7" class="text-center" style="padding: 30px; color: var(--text-muted);">No products found.</td></tr>';
-    }
-
+if (is_ajax()) {
+    admin_product_rows($products);
     exit;
 }
 
-include __DIR__ . '/../includes/header.php';
+include __DIR__ . '/../includes/admin_header.php';
 ?>
 
-    <div class="admin-container">
-        <div class="admin-header">
-            <h2>Product Management</h2>
+<div class="admin-container">
+    <div class="admin-header">
+        <h2>Product Management</h2>
 
-            <div style="display: flex; gap: 15px; align-items: center;">
-                <form action="products.php" method="GET" class="admin-search-form">
-                    <input type="text" name="q" placeholder="Search products..."
-                           value="<?php echo htmlspecialchars($search_query); ?>" class="admin-search-input">
-                    <?php if($search_query): ?>
-                        <a href="products.php" class="btn-outline">Clear</a>
-                    <?php endif; ?>
-                    <button type="submit" class="btn-primary">Search</button>
-                </form>
-                <a href="product_form.php" class="btn-primary">+ Add New Product</a>
-            </div>
+        <div class="admin-header-actions">
+            <form action="/admin/products.php" method="GET" class="admin-search-form" data-target="#productTableBody">
+                <input type="text" name="q" value="<?= e($q) ?>"
+                       placeholder="Search products..." class="admin-search-input">
+                <?php html_submit('Search'); ?>
+                <?php if ($q !== ''): ?>
+                    <a href="/admin/products.php" class="btn-outline">Clear</a>
+                <?php endif; ?>
+            </form>
+
+            <a href="/admin/product_form.php" class="btn-primary">+ Add New Product</a>
         </div>
+    </div>
 
-        <div class="card mt-4">
-            <div class="table-responsive">
-                <table class="admin-table">
-                    <thead>
+    <div class="card mt-4">
+        <div class="table-responsive">
+            <table class="admin-table">
+                <thead>
                     <tr>
                         <th>ID</th>
                         <th>Image</th>
                         <th>Name</th>
-                        <th>Price (RM)</th>
+                        <th>Price</th>
                         <th>Stock</th>
                         <th>Status</th>
                         <th>Action</th>
                     </tr>
-                    </thead>
-                    <tbody>
-                    <?php if (count($products) > 0): ?>
-                        <?php foreach ($products as $p): ?>
-                            <tr>
-                                <td>#<?php echo $p['id']; ?></td>
-                                <td>
-                                    <img src="/assets/images/<?php echo htmlspecialchars($p['image']); ?>" alt="product" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
-                                </td>
-                                <td><strong><?php echo htmlspecialchars($p['name']); ?></strong></td>
-                                <td><?php echo number_format($p['price'], 2); ?></td>
-                                <td><?php echo $p['stock']; ?></td>
-                                <td>
-                                    <?php if ($p['status'] === 'active'): ?>
-                                        <span class="badge" style="background: #e6f4ea; color: #1e8e3e;">Active</span>
-                                    <?php else: ?>
-                                        <span class="badge" style="background: #fce8e6; color: #d93025;">Inactive</span>
-                                    <?php endif; ?>
-                                </td>
-                                <td>
-                                    <a href="product_form.php?id=<?php echo $p['id']; ?>" class="btn-outline btn-sm">Edit</a>
-
-                                    <?php if ($p['status'] === 'active'): ?>
-                                        <a href="products.php?toggle_status=inactive&id=<?php echo $p['id']; ?>" class="btn-outline btn-sm" style="color: #d93025; border-color: #d93025;" onclick="return confirm('Deactivate this product?');">Deactivate</a>
-                                    <?php else: ?>
-                                        <a href="products.php?toggle_status=active&id=<?php echo $p['id']; ?>" class="btn-outline btn-sm" style="color: #1e8e3e; border-color: #1e8e3e;">Activate</a>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="7" class="text-center" style="padding: 30px; color: var(--text-muted);">No products found.</td>
-                        </tr>
-                    <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
+                </thead>
+                <tbody id="productTableBody">
+                    <?php admin_product_rows($products); ?>
+                </tbody>
+            </table>
         </div>
     </div>
+</div>
 
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include __DIR__ . '/../includes/admin_footer.php'; ?>

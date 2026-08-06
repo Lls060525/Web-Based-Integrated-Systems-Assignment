@@ -1,156 +1,261 @@
 <?php
-// /admin/product_form.php
-require_once __DIR__ . '/../admin/admin_auth.php';
+// ============================================================
+// admin/product_form.php - Product CRUD + Photo Upload (Admin)
+// ============================================================
 
-$title = 'Manage Product - Admin';
-$product_id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
-$is_edit = $product_id !== false && $product_id !== null;
+require_once __DIR__ . '/admin_auth.php';
 
-$errors = [];
-$success = "";
+$productId = get_int('id');
+$isEdit    = $productId !== null;
 
-// Initialize empty data
+// Defaults for the "add" mode.
 $product = [
-    'name' => '', 'category_id' => '', 'description' => '', 'price' => '', 'stock' => '0', 'image' => 'default-product.png'
+    'name'        => '',
+    'category_id' => '',
+    'description' => '',
+    'price'       => '',
+    'stock'         => '0',
+    'reorder_level' => (string)STOCK_DEFAULT_REORDER_LEVEL,
+    'image'       => null,
+    'status'      => 'active',
 ];
 
-// Fetch all categories for the dropdown
-$cat_stmt = $pdo->query("SELECT * FROM categories ORDER BY name ASC");
-$categories = $cat_stmt->fetchAll();
+if ($isEdit) {
+    $found = db_one('SELECT * FROM products WHERE id = ?', [$productId]);
 
-// Fetch existing data if editing
-if ($is_edit) {
-    $stmt = $pdo->prepare("SELECT * FROM products WHERE id = ?");
-    $stmt->execute([$product_id]);
-    $fetched = $stmt->fetch();
-    if ($fetched) {
-        $product = $fetched;
-    } else {
-        die("Product not found.");
+    if (!$found) {
+        flash_error('Product not found.');
+        redirect('/admin/products.php');
     }
+    $product = $found;
 }
 
-// Handle Form Submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $name = trim($_POST['name'] ?? '');
-    $category_id = filter_input(INPUT_POST, 'category_id', FILTER_VALIDATE_INT);
-    $description = trim($_POST['description'] ?? '');
-    $price = filter_input(INPUT_POST, 'price', FILTER_VALIDATE_FLOAT);
-    $stock = filter_input(INPUT_POST, 'stock', FILTER_VALIDATE_INT);
+$categories = db_all('SELECT id, name FROM categories ORDER BY name ASC');
+$categoryOptions = array_column($categories, 'name', 'id');
 
-    // Validations
-    if (empty($name)) $errors[] = "Product name is required.";
-    if (!$category_id) $errors[] = "Please select a category.";
-    if ($price === false || $price <= 0) $errors[] = "Valid price is required.";
-    if ($stock === false || $stock < 0) $errors[] = "Valid stock quantity is required.";
+$statusOptions = ['active' => 'Active', 'inactive' => 'Inactive'];
 
-    // File Upload Logic
-    $image_filename = $product['image'];
-    if (isset($_FILES['product_image']) && $_FILES['product_image']['error'] === UPLOAD_ERR_OK) {
-        $ext = pathinfo($_FILES['product_image']['name'], PATHINFO_EXTENSION);
-        $image_filename = 'prod_' . time() . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
-        move_uploaded_file($_FILES['product_image']['tmp_name'], __DIR__ . '/../assets/images/' . $image_filename);
+if (is_post()) {
+    csrf_check();
+
+    $name        = post('name');
+    $categoryId  = post_int('category_id');
+    $description = post('description');
+    $price       = post('price');
+    $stock       = post('stock');
+    $reorder     = post('reorder_level', (string)STOCK_DEFAULT_REORDER_LEVEL);
+    $status      = post('status');
+
+    // ---------- Server-side validation ----------
+    if (v_required('name', $name, 'Product name')) {
+        v_max('name', $name, 150, 'Product name');
     }
 
-    if (empty($errors)) {
-        if ($is_edit) {
-            $stmt = $pdo->prepare("UPDATE products SET name = ?, category_id = ?, description = ?, price = ?, stock = ?, image = ? WHERE id = ?");
-            $stmt->execute([$name, $category_id, $description, $price, $stock, $image_filename, $product_id]);
-            $success = "Product updated successfully!";
+    if ($categoryId === null) {
+        add_err('category_id', 'Please select a category.');
+    } elseif (!array_key_exists($categoryId, $categoryOptions)) {
+        add_err('category_id', 'The selected category does not exist.');
+    }
 
-            // Update local array to reflect changes instantly
-            $product['name'] = $name; $product['category_id'] = $category_id; $product['description'] = $description;
-            $product['price'] = $price; $product['stock'] = $stock; $product['image'] = $image_filename;
+    if (v_required('description', $description, 'Description')) {
+        v_max('description', $description, 2000, 'Description');
+    }
+
+    v_number('price', $price, 0.01, 999999.99, 'Price');
+    v_integer('stock', $stock, 0, 100000, 'Stock quantity');
+
+    if (reorder_level_ready()) {
+        v_integer('reorder_level', $reorder, 0, 100000, 'Reorder level');
+    }
+    v_in('status', $status, ['active', 'inactive'], 'Status');
+
+    // ---------- Photo upload ----------
+    $image = $product['image'];
+    $newImage = save_uploaded_image('product_image', DIR_UPLOAD_PRODUCTS, 'prod');
+
+    if ($newImage !== null) {
+        $image = $newImage;
+    } elseif (!$isEdit && no_err() && empty($product['image'])) {
+        // Adding a product with no photo: fall back to the placeholder.
+        $image = 'default-product.png';
+    }
+
+    if (no_err()) {
+        if ($isEdit) {
+            // Stock is NOT written here. Editing a product must not silently
+            // rewrite the quantity, because that would bypass the movement
+            // ledger. Any change is recorded through Stock Control instead.
+            $sql    = 'UPDATE products
+                          SET name = ?, category_id = ?, description = ?,
+                              price = ?, image = ?, status = ?';
+            $params = [$name, $categoryId, $description, $price, $image, $status];
+
+            if (reorder_level_ready()) {
+                $sql     .= ', reorder_level = ?';
+                $params[] = (int)$reorder;
+            }
+
+            $sql     .= ' WHERE id = ?';
+            $params[] = $productId;
+
+            db_exec($sql, $params);
+
+            // A deliberate stock correction from this form still goes
+            // through the ledger, so nothing is ever unexplained.
+            $newStock = (int)$stock;
+            $oldStock = (int)$found['stock'];
+
+            if ($newStock !== $oldStock && stock_module_ready()) {
+                try {
+                    adjust_stock(
+                        $productId,
+                        $newStock - $oldStock,
+                        'adjust',
+                        'Corrected on the product edit form',
+                        current_user_id()
+                    );
+                } catch (\RuntimeException $ex) {
+                    flash_error('Stock was not changed: ' . $ex->getMessage());
+                }
+            } elseif ($newStock !== $oldStock) {
+                db_exec('UPDATE products SET stock = ? WHERE id = ?', [$newStock, $productId]);
+            }
+
+            if ($newImage !== null) {
+                delete_uploaded_file(DIR_UPLOAD_PRODUCTS, $found['image']);
+            }
+
+            flash_success('Product updated successfully.');
         } else {
-            $stmt = $pdo->prepare("INSERT INTO products (name, category_id, description, price, stock, image) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->execute([$name, $category_id, $description, $price, $stock, $image_filename]);
-            $new_id = $pdo->lastInsertId();
-            header("Location: product_form.php?id=$new_id&success=1");
-            exit;
+            $cols = ['name', 'category_id', 'description', 'price', 'stock', 'image', 'status'];
+            $vals = [$name, $categoryId, $description, $price, $stock, $image, $status];
+
+            if (reorder_level_ready()) {
+                $cols[] = 'reorder_level';
+                $vals[] = (int)$reorder;
+            }
+
+            db_exec(
+                'INSERT INTO products (' . implode(', ', $cols) . ') VALUES ('
+                . implode(', ', array_fill(0, count($cols), '?')) . ')',
+                $vals
+            );
+
+            // Opening stock is the first entry in this product's ledger.
+            if ((int)$stock > 0 && stock_module_ready()) {
+                record_stock_movement(
+                    (int)db_last_id(),
+                    'initial',
+                    (int)$stock,
+                    'Opening stock set when the product was created',
+                    null,
+                    current_user_id()
+                );
+            }
+
+            flash_success('Product added successfully.');
         }
+
+        redirect('/admin/products.php');
     }
+
+    // Validation failed: keep the newly uploaded image visible in the preview.
+    $product['image'] = $image;
 }
 
-if (isset($_GET['success']) && $_GET['success'] == 1) {
-    $success = "New product added successfully!";
-}
+$title = ($isEdit ? 'Edit' : 'Add') . ' Product - Admin';
 
-include __DIR__ . '/../includes/header.php';
+include __DIR__ . '/../includes/admin_header.php';
 ?>
 
-    <div class="admin-container" style="max-width: 800px;">
-        <div class="admin-header">
-            <h2><?php echo $is_edit ? 'Edit Product' : 'Add New Product'; ?></h2>
-            <a href="products.php" class="btn-outline">&larr; Back to List</a>
-        </div>
-
-        <div class="card mt-4" style="padding: 30px;">
-            <?php if ($success): ?>
-                <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
-            <?php endif; ?>
-
-            <?php if (!empty($errors)): ?>
-                <div class="alert alert-error">
-                    <ul style="margin: 0; padding-left: 20px;">
-                        <?php foreach ($errors as $err) echo "<li>" . htmlspecialchars($err) . "</li>"; ?>
-                    </ul>
-                </div>
-            <?php endif; ?>
-
-            <form action="" method="POST" enctype="multipart/form-data" class="form-standard">
-
-                <div style="display: flex; gap: 20px;">
-                    <div class="form-group" style="flex: 2;">
-                        <label>Product Name</label>
-                        <input type="text" name="name" value="<?php echo htmlspecialchars($product['name']); ?>" required>
-                    </div>
-
-                    <div class="form-group" style="flex: 1;">
-                        <label>Category</label>
-                        <select name="category_id" required style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 4px; font-size: 14px; outline: none; background: #fff;">
-                            <option value="">-- Select Category --</option>
-                            <?php foreach ($categories as $cat): ?>
-                                <option value="<?php echo $cat['id']; ?>" <?php echo ($product['category_id'] == $cat['id']) ? 'selected' : ''; ?>>
-                                    <?php echo htmlspecialchars($cat['name']); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Description</label>
-                    <textarea name="description" rows="4" style="width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 4px;" required><?php echo htmlspecialchars($product['description']); ?></textarea>
-                </div>
-
-                <div style="display: flex; gap: 20px;">
-                    <div class="form-group" style="flex: 1;">
-                        <label>Price (RM)</label>
-                        <input type="number" step="0.01" name="price" value="<?php echo htmlspecialchars($product['price']); ?>" required>
-                    </div>
-
-                    <div class="form-group" style="flex: 1;">
-                        <label>Stock Quantity</label>
-                        <input type="number" name="stock" value="<?php echo htmlspecialchars($product['stock']); ?>" required>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Product Image</label>
-                    <?php if ($is_edit): ?>
-                        <div style="margin-bottom: 10px;">
-                            <img src="/assets/images/<?php echo htmlspecialchars($product['image']); ?>" style="width: 100px; border-radius: 4px; border: 1px solid var(--border);">
-                        </div>
-                    <?php endif; ?>
-                    <input type="file" name="product_image" accept="image/*">
-                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 5px;">Leave blank to keep current image.</p>
-                </div>
-
-                <div class="form-actions text-right">
-                    <button type="submit" class="btn-primary"><?php echo $is_edit ? 'Save Changes' : 'Publish Product'; ?></button>
-                </div>
-            </form>
-        </div>
+<div class="admin-container admin-container-narrow">
+    <div class="admin-header">
+        <h2><?= $isEdit ? 'Edit Product' : 'Add New Product' ?></h2>
+        <a href="/admin/products.php" class="btn-outline">&larr; Back to List</a>
     </div>
 
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+    <div class="card mt-4 card-padded">
+
+        <?php err_summary(); ?>
+
+        <?php if (count($categories) === 0): ?>
+            <div class="alert alert-info">
+                There are no categories yet.
+                <a href="/admin/category_form.php">Create one first</a> so products can be classified.
+            </div>
+        <?php endif; ?>
+
+        <form action="" method="POST" enctype="multipart/form-data" class="form-standard">
+            <?php csrf_field(); ?>
+
+            <div class="form-row">
+                <div class="form-col form-col-2">
+                    <?php field('name', 'Product Name', function () use ($product) {
+                        html_text('name', $product['name'], ['required' => true, 'maxlength' => 150]);
+                    }, true); ?>
+                </div>
+
+                <div class="form-col">
+                    <?php field('category_id', 'Category', function () use ($categoryOptions, $product) {
+                        html_select('category_id', $categoryOptions, $product['category_id'],
+                                    ['required' => true], '-- Select Category --');
+                    }, true); ?>
+                </div>
+            </div>
+
+            <?php field('description', 'Description', function () use ($product) {
+                html_textarea('description', $product['description'], ['rows' => 5, 'required' => true, 'maxlength' => 2000]);
+            }, true); ?>
+
+            <div class="form-row">
+                <div class="form-col">
+                    <?php field('price', 'Price (RM)', function () use ($product) {
+                        html_number('price', $product['price'], ['step' => '0.01', 'min' => '0.01', 'required' => true]);
+                    }, true); ?>
+                </div>
+
+                <div class="form-col">
+                    <?php field('stock', 'Stock Quantity', function () use ($product, $isEdit) {
+                        html_number('stock', $product['stock'], ['min' => '0', 'required' => true]);
+                        if ($isEdit) {
+                            echo '<small class="form-hint">Changing this records a correction in the '
+                               . '<a href="/admin/stock.php">stock ledger</a>.</small>';
+                        }
+                    }, true); ?>
+                </div>
+
+                <?php if (reorder_level_ready()): ?>
+                    <div class="form-col">
+                        <?php field('reorder_level', 'Reorder Level', function () use ($product) {
+                            html_number('reorder_level', $product['reorder_level'] ?? STOCK_DEFAULT_REORDER_LEVEL,
+                                        ['min' => '0', 'required' => true]);
+                            echo '<small class="form-hint">Flag as low at or below this.</small>';
+                        }, true); ?>
+                    </div>
+                <?php endif; ?>
+
+                <div class="form-col">
+                    <?php field('status', 'Status', function () use ($statusOptions, $product) {
+                        html_select('status', $statusOptions, $product['status']);
+                    }, true); ?>
+                </div>
+            </div>
+
+            <?php field('product_image', 'Product Photo', function () use ($product) { ?>
+                <div class="image-preview-box">
+                    <img src="<?= e(product_image($product['image'])) ?>"
+                         id="productImagePreview" alt="Product preview" class="image-preview">
+                </div>
+                <?php html_file('product_image', ['accept' => 'image/*', 'id' => 'productImageInput']); ?>
+                <small class="form-hint">JPG, PNG, GIF or WEBP, maximum 2 MB. Leave blank to keep the current photo.</small>
+            <?php }); ?>
+
+            <div class="form-actions text-right">
+                <a href="/admin/products.php" class="btn-outline">Cancel</a>
+                <?php html_submit($isEdit ? 'Save Changes' : 'Publish Product'); ?>
+            </div>
+        </form>
+    </div>
+</div>
+
+<?php include __DIR__ . '/../includes/admin_footer.php'; ?>

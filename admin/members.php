@@ -1,71 +1,95 @@
 <?php
-// 第一行强制引入网关，阻断非法访问
+// ============================================================
+// admin/members.php - Member Listing + Basic Searching (Admin)
+// ============================================================
+
 require_once __DIR__ . '/admin_auth.php';
+require_once __DIR__ . '/../includes/admin_rows.php';
 
 $title = 'Member Management - Admin';
 
-// 接收搜索关键字 (GET 请求，方便用户分享或收藏搜索结果)
-$search_query = trim($_GET['q'] ?? '');
+// ---------- Block / unblock a member account ----------
+if (is_post()) {
+    csrf_check();
 
-// 构建基础 SQL：只查询角色为 member 的用户
-$sql = "SELECT id, name, email, profile_photo, created_at FROM users WHERE role = 'member'";
+    if (post('action') === 'set_status') {
+        $id     = post_int('id');
+        $status = post('status');
+
+        if ($id === null || !in_array($status, ['active', 'banned'], true)) {
+            flash_error('Invalid request.');
+        } elseif ($id === current_user_id()) {
+            flash_error('You cannot change the status of your own account.');
+        } else {
+            $affected = db_exec(
+                "UPDATE users SET status = ? WHERE id = ? AND role = 'member'",
+                [$status, $id]
+            );
+
+            if ($affected === 0) {
+                flash_error('Member not found.');
+            } else {
+                flash_success('Account has been ' . ($status === 'banned' ? 'blocked' : 'unblocked') . '.');
+            }
+        }
+    }
+
+    redirect('/admin/members.php');
+}
+
+// ---------- Listing ----------
+$q      = get('q');
+$status = get('status');
+
+$sql    = "SELECT id, name, email, status, profile_photo, created_at FROM users WHERE role = 'member'";
 $params = [];
 
-// 如果有搜索词，动态拼接 SQL (严格使用参数化查询防注入)
-if ($search_query !== '') {
-    $sql .= " AND (name LIKE ? OR email LIKE ?)";
-    $search_term = "%{$search_query}%";
-    $params[] = $search_term;
-    $params[] = $search_term;
+if ($q !== '') {
+    $sql     .= ' AND (name LIKE ? OR email LIKE ?)';
+    $params[] = '%' . $q . '%';
+    $params[] = '%' . $q . '%';
 }
 
-$sql .= " ORDER BY id ASC"; // 按 ID 升序排列 (从 1 开始往下排)
-
-$stmt = $pdo->prepare($sql);
-$stmt->execute($params);
-$members = $stmt->fetchAll();
-
-// ==========================================
-// 核心逻辑：判断是否为 jQuery AJAX 请求
-// ==========================================
-$is_ajax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
-
-if ($is_ajax) {
-    // 如果是 AJAX，只生成 <tbody> 里面的 HTML 结构，不包含头部和尾部
-    if (count($members) > 0) {
-        foreach ($members as $user) {
-            $avatar = $user['profile_photo'] === 'default-avatar.png' ? 'default-avatar.png' : $user['profile_photo'];
-            echo '<tr>';
-            echo '<td>#' . $user['id'] . '</td>';
-            echo '<td><img src="/assets/uploads/avatars/' . htmlspecialchars($avatar) . '" alt="avatar" class="table-avatar"></td>';
-            echo '<td><strong>' . htmlspecialchars($user['name']) . '</strong></td>';
-            echo '<td>' . htmlspecialchars($user['email']) . '</td>';
-            echo '<td>' . date('d M Y', strtotime($user['created_at'])) . '</td>';
-            echo '<td><a href="/admin/member_detail.php?id=' . $user['id'] . '" class="btn-outline btn-sm">View Detail</a></td>';
-            echo '</tr>';
-        }
-    } else {
-        echo '<tr><td colspan="6" class="text-center" style="padding: 30px; color: var(--text-muted);">No members found.</td></tr>';
-    }
-    exit; // 必须 exit，防止后续的 header 和 footer 也被当成数据传给前端
+if (in_array($status, USER_STATUSES, true)) {
+    $sql     .= ' AND status = ?';
+    $params[] = $status;
 }
 
-// 如果不是 AJAX（用户直接输入网址访问），则继续渲染完整页面
-include __DIR__ . '/../includes/header.php';
+$sql .= ' ORDER BY id ASC';
+
+$members = db_all($sql, $params);
+
+// The AJAX search only needs the table rows.
+if (is_ajax()) {
+    admin_member_rows($members);
+    exit;
+}
+
+include __DIR__ . '/../includes/admin_header.php';
 ?>
 
 <div class="admin-container">
     <div class="admin-header">
         <h2>Member Management</h2>
-        
-        <form action="members.php" method="GET" class="admin-search-form">
-            <input type="text" name="q" placeholder="Search by name or email..." 
-                   value="<?php echo htmlspecialchars($search_query); ?>" class="admin-search-input">
-            <button type="submit" class="btn-primary">Search</button>
-            <?php if($search_query): ?>
-                <a href="members.php" class="btn-outline">Clear</a>
-            <?php endif; ?>
-        </form>
+
+        <div class="admin-header-actions">
+            <form action="/admin/members.php" method="GET" class="filter-form-inline">
+                <?php html_hidden('q', $q); ?>
+                <?php html_select('status', USER_STATUS_LABELS, $status,
+                                  ['class' => 'form-control form-control-sm js-auto-submit'], 'All statuses'); ?>
+                <noscript><?php html_submit('Filter', ['class' => 'btn-outline btn-sm']); ?></noscript>
+            </form>
+
+            <form action="/admin/members.php" method="GET" class="admin-search-form" data-target="#memberTableBody">
+                <?php if (in_array($status, USER_STATUSES, true)) { html_hidden('status', $status); } ?>
+                <input type="text" name="q" value="<?= e($q) ?>"
+                       placeholder="Search by name or email..." class="admin-search-input">
+                <?php html_submit('Search'); ?>
+                <?php if ($q !== '' || $status !== ''): ?>
+                    <a href="/admin/members.php" class="btn-outline">Clear</a>
+                <?php endif; ?>
+            </form>
+        </div>
     </div>
 
     <div class="card mt-4">
@@ -78,37 +102,16 @@ include __DIR__ . '/../includes/header.php';
                         <th>Name</th>
                         <th>Email</th>
                         <th>Joined Date</th>
+                        <th>Status</th>
                         <th>Action</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <?php if (count($members) > 0): ?>
-                        <?php foreach ($members as $user): ?>
-                            <tr>
-                                <td>#<?php echo $user['id']; ?></td>
-                                <td>
-                                    <?php $avatar = $user['profile_photo'] === 'default-avatar.png' ? 'default-avatar.png' : $user['profile_photo']; ?>
-                                    <img src="/assets/uploads/avatars/<?php echo htmlspecialchars($avatar); ?>" alt="avatar" class="table-avatar">
-                                </td>
-                                <td><strong><?php echo htmlspecialchars($user['name']); ?></strong></td>
-                                <td><?php echo htmlspecialchars($user['email']); ?></td>
-                                <td><?php echo date('d M Y', strtotime($user['created_at'])); ?></td>
-                                <td>
-                                    <a href="member_detail.php?id=<?php echo $user['id']; ?>" class="btn-outline btn-sm">View Detail</a>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <tr>
-                            <td colspan="6" class="text-center" style="padding: 30px; color: var(--text-muted);">
-                                No members found.
-                            </td>
-                        </tr>
-                    <?php endif; ?>
+                <tbody id="memberTableBody">
+                    <?php admin_member_rows($members); ?>
                 </tbody>
             </table>
         </div>
     </div>
 </div>
 
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include __DIR__ . '/../includes/admin_footer.php'; ?>

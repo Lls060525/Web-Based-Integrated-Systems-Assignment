@@ -1,14 +1,12 @@
 <?php
-// checkout_cancel.php
-session_start();
+// ============================================================
+// checkout_cancel.php - Stripe cancel callback
+// ============================================================
 
-if (!isset($_SESSION['user_id']) || (isset($_SESSION['role']) && $_SESSION['role'] !== 'member')) {
-    header('Location: /auth/login.php');
-    exit;
-}
+require_once __DIR__ . '/lib/init.php';
 
-// Provide user-friendly feedback
-$_SESSION['error_msg'] = "Payment was cancelled. Your cart is saved, you can complete the checkout whenever you're ready.";
+require_member();
 
-header('Location: /cart.php');
-exit;
+flash_error('Payment was cancelled. Your cart has been saved, so you can check out whenever you are ready.');
+
+redirect('/cart.php');

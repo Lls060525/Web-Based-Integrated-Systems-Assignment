@@ -1,51 +1,73 @@
 <?php
-session_start();
-header('Content-Type: application/json');
+// ============================================================
+// api/cart_action.php - AJAX endpoint for the shopping cart
+// Always responds with JSON.
+// ============================================================
 
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'member') {
-    echo json_encode(['status' => 'error', 'message' => 'Please log in as a Member to shop.']);
+require_once __DIR__ . '/../lib/init.php';
+
+header('Content-Type: application/json; charset=utf-8');
+
+/** Send a JSON response and stop. */
+function json_out(array $payload): void
+{
+    echo json_encode($payload);
     exit;
 }
 
-$user_id = $_SESSION['user_id'];
-$pdo = new PDO("mysql:host=127.0.0.1;dbname=mobile2u;charset=utf8mb4", "root", "", [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
-
-$action = $_POST['action'] ?? '';
-$product_id = filter_input(INPUT_POST, 'product_id', FILTER_VALIDATE_INT);
-
-if ($action === 'add' && $product_id) {
-    // 【适配字段】：stock_quantity 改为 stock
-    $stmt = $pdo->prepare("SELECT stock FROM products WHERE id = ?");
-    $stmt->execute([$product_id]);
-    $stock = $stmt->fetchColumn();
-
-    if ($stock <= 0) {
-        echo json_encode(['status' => 'error', 'message' => 'This product is out of stock.']);
-        exit;
-    }
-
-    $stmt = $pdo->prepare("SELECT id, quantity FROM cart WHERE user_id = ? AND product_id = ?");
-    $stmt->execute([$user_id, $product_id]);
-    $cart_item = $stmt->fetch(PDO::FETCH_ASSOC);
-
-    if ($cart_item) {
-        if ($cart_item['quantity'] >= $stock) {
-            echo json_encode(['status' => 'error', 'message' => 'Cannot add more. Limit reached.']);
-            exit;
-        }
-        $stmt = $pdo->prepare("UPDATE cart SET quantity = quantity + 1 WHERE id = ?");
-        $stmt->execute([$cart_item['id']]);
-    } else {
-        $stmt = $pdo->prepare("INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, 1)");
-        $stmt->execute([$user_id, $product_id]);
-    }
-
-    $stmt = $pdo->prepare("SELECT SUM(quantity) FROM cart WHERE user_id = ?");
-    $stmt->execute([$user_id]);
-    $cart_count = $stmt->fetchColumn() ?: 0;
-
-    echo json_encode(['status' => 'success', 'message' => 'Added to cart successfully!', 'cart_count' => $cart_count]);
-    exit;
+// ---------- Authorization ----------
+if (!is_member()) {
+    json_out([
+        'status'   => 'error',
+        'message'  => 'Please log in as a member to shop.',
+        'redirect' => '/auth/login.php',
+    ]);
 }
 
-echo json_encode(['status' => 'error', 'message' => 'Invalid request.']);
+// ---------- CSRF ----------
+// main.js sends the token from the <meta name="csrf-token"> tag.
+if (!is_post() || !csrf_valid()) {
+    json_out(['status' => 'error', 'message' => 'Invalid request. Please refresh the page.']);
+}
+
+$userId    = current_user_id();
+$action    = post('action');
+$productId = post_int('product_id');
+
+if ($action !== 'add' || $productId === null) {
+    json_out(['status' => 'error', 'message' => 'Invalid request.']);
+}
+
+// ---------- Stock check ----------
+$product = db_one(
+    "SELECT id, name, stock FROM products WHERE id = ? AND status = 'active'",
+    [$productId]
+);
+
+if (!$product) {
+    json_out(['status' => 'error', 'message' => 'This product is no longer available.']);
+}
+
+if ((int)$product['stock'] <= 0) {
+    json_out(['status' => 'error', 'message' => 'This product is out of stock.']);
+}
+
+// ---------- Add or increment ----------
+$line = db_one('SELECT id, quantity FROM cart WHERE user_id = ? AND product_id = ?', [$userId, $productId]);
+
+if ($line) {
+    if ((int)$line['quantity'] >= (int)$product['stock']) {
+        json_out(['status' => 'error', 'message' => 'You already have every unit we have in stock.']);
+    }
+    db_exec('UPDATE cart SET quantity = quantity + 1 WHERE id = ?', [$line['id']]);
+} else {
+    db_exec('INSERT INTO cart (user_id, product_id, quantity) VALUES (?, ?, 1)', [$userId, $productId]);
+}
+
+$cartCount = (int)db_value('SELECT COALESCE(SUM(quantity), 0) FROM cart WHERE user_id = ?', [$userId]);
+
+json_out([
+    'status'     => 'success',
+    'message'    => $product['name'] . ' added to your cart.',
+    'cart_count' => $cartCount,
+]);
