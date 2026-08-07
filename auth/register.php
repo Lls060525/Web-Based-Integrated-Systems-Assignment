@@ -4,6 +4,8 @@
 // ============================================================
 
 require_once __DIR__ . '/../lib/init.php';
+require_once __DIR__ . '/../includes/dropzone.php';
+require_once __DIR__ . '/../includes/captcha_field.php';
 
 require_guest();
 
@@ -32,6 +34,10 @@ if (is_post()) {
         v_same('password_confirm', $confirm, $password, 'Confirm password');
     }
 
+    // Checked with everything else so a bot gets no clue about which
+    // field it got wrong from the timing or the order of the errors.
+    captcha_verify('register');
+
     // ---- Optional profile photo on sign-up ----
     $photo = null;
     if (no_err()) {
@@ -48,6 +54,7 @@ if (is_post()) {
         $user = db_one('SELECT id, role FROM users WHERE id = ?', [db_last_id()]);
         login_user($user);
 
+        captcha_clear('register');
         flash_success('Welcome to ' . APP_NAME . ', ' . $name . '. Your account is ready.');
         redirect('/member/home.php');
     }
@@ -71,7 +78,11 @@ include __DIR__ . '/../includes/header.php';
             }, true); ?>
 
             <?php field('email', 'Email Address', function () {
-                html_email('email', '', ['required' => true, 'maxlength' => 100]);
+                html_email('email', '', [
+                    'required'  => true,
+                    'maxlength' => 100,
+                    'id'        => 'registerEmail',
+                ]);
             }, true); ?>
 
             <?php field('password', 'Password', function () {
@@ -84,9 +95,13 @@ include __DIR__ . '/../includes/header.php';
             }, true); ?>
 
             <?php field('profile_photo', 'Profile Photo (optional)', function () {
-                html_file('profile_photo', ['accept' => 'image/*']);
-                echo '<small class="form-hint">JPG, PNG, GIF or WEBP. Maximum 2 MB.</small>';
+                render_dropzone('profile_photo', null, [
+                    'shape' => 'round',
+                    'hint'  => 'Optional. Drag a photo here or click to browse.',
+                ]);
             }); ?>
+
+            <?php render_captcha_field('register'); ?>
 
             <div class="form-actions">
                 <?php html_submit('Sign Up', ['class' => 'btn-primary btn-block']); ?>

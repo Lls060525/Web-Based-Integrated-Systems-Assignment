@@ -23,7 +23,15 @@ $layout_page = match ($layout_page) {
     'voucher_form.php'  => 'vouchers.php',
     'member_detail.php' => 'members.php',
     'category_form.php' => 'categories.php',
-    'product_form.php'  => 'products.php',
+    'product_form.php'   => 'products.php',
+    'batch_price.php'    => 'batch_import.php',
+    'spec_form.php'      => 'specs.php',
+    'store_form.php'     => 'stores.php',
+    'product_specs.php'  => 'products.php',
+    'product_options.php'=> 'products.php',
+    'batch_delete.php'   => 'batch_import.php',
+    'product_photos.php' => 'products.php',
+    'photo_edit.php'     => 'products.php',
     'order_detail.php'  => 'orders.php',
     default             => $layout_page,
 };
@@ -35,7 +43,12 @@ $layout_nav = [
     'categories.php'=> ['label' => 'Categories', 'icon' => 'fa-tags'],
     'products.php'  => ['label' => 'Products',   'icon' => 'fa-box'],
     'stock.php'     => ['label' => 'Stock',      'icon' => 'fa-boxes-stacked'],
+    'specs.php'     => ['label' => 'Specs',      'icon' => 'fa-list-check'],
+    'stores.php'    => ['label' => 'Stores',     'icon' => 'fa-location-dot'],
+    'batch_import.php' => ['label' => 'Batch Tools', 'icon' => 'fa-layer-group'],
+    'qr_scan.php'   => ['label' => 'Scan QR',    'icon' => 'fa-qrcode'],
     'orders.php'    => ['label' => 'Orders',     'icon' => 'fa-shopping-cart'],
+    'reviews.php'   => ['label' => 'Reviews',    'icon' => 'fa-star'],
     'vouchers.php'  => ['label' => 'Vouchers',   'icon' => 'fa-ticket'],
     'login_attempts.php' => ['label' => 'Login Security', 'icon' => 'fa-shield-halved'],
     'mail_test.php' => ['label' => 'Mail & PDF',  'icon' => 'fa-envelope-circle-check'],
@@ -59,6 +72,8 @@ $layout_nav = [
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="/assets/js/main.js" defer></script>
     <script src="/assets/js/admin.js" defer></script>
+    <script src="/assets/js/dropzone.js" defer></script>
+    <script src="/assets/js/webcam.js" defer></script>
 </head>
 <body>
 

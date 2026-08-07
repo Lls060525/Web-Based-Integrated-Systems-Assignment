@@ -29,6 +29,12 @@ if (is_post()) {
             if ($affected === 0) {
                 flash_error('Member not found.');
             } else {
+                // Blocking must take effect immediately, including on any
+                // device that would otherwise sign straight back in.
+                if ($status === 'banned') {
+                    remember_forget_all((int)$id);
+                }
+
                 flash_success('Account has been ' . ($status === 'banned' ? 'blocked' : 'unblocked') . '.');
             }
         }

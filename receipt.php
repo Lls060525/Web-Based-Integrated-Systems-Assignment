@@ -50,6 +50,24 @@ if ($mode === 'send') {
         redirect($backUrl);
     }
 
+    // RECEIPT_MAX_SENDS is a lifetime cap, not a double-click guard: two
+    // fast clicks both pass it and both burn a send. The one-use nonce is
+    // what makes one click send one email.
+    if (!form_nonce_valid('receipt_send_' . $orderId)) {
+        flash_error('That receipt was already sent. Reload the page if you want to send it again.');
+        redirect($backUrl);
+    }
+
+    $wait = action_cooldown('receipt_send', RECEIPT_RESEND_COOLDOWN);
+
+    if ($wait > 0) {
+        flash_error('Please wait ' . $wait . ' more second' . ($wait === 1 ? '' : 's')
+                  . ' before sending another receipt.');
+        redirect($backUrl);
+    }
+
+    action_touch('receipt_send');
+
     $result = send_receipt_email($orderId);
 
     if (!$result['sent']) {

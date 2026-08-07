@@ -9,6 +9,7 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+require_once __DIR__ . '/../includes/dropzone.php';
 
 $title  = 'Admin Profile - ' . APP_NAME;
 $userId = current_user_id();
@@ -69,6 +70,17 @@ if (is_post()) {
                 );
                 revoke_reset_tokens($userId);
 
+                // Every remembered device is dropped too. The old password
+                // may be exactly how an attacker planted one of them.
+                remember_forget_all((int)$userId);
+
+                // The current browser session survives, so they are not
+                // thrown out mid-task, but its id is rotated so any session
+                // fixated earlier is now worthless.
+                if ($userId === current_user_id()) {
+                    session_regenerate_id(true);
+                }
+
                 flash_success('Password changed successfully.');
                 redirect('/admin/profile.php?tab=password');
             }
@@ -110,18 +122,17 @@ include __DIR__ . '/../includes/admin_header.php';
 
         <aside class="profile-sidebar">
             <div class="profile-avatar-section">
-                <img src="<?= e(avatar_image($user['profile_photo'] ?? null)) ?>"
-                     alt="Profile photo" id="avatarPreview" class="avatar-img">
-
                 <form action="/admin/profile.php?tab=<?= e($activeTab) ?>" method="POST"
                       enctype="multipart/form-data" class="upload-form">
                     <?php csrf_field(); ?>
                     <?php html_hidden('action', 'update_image'); ?>
 
-                    <label class="btn-outline" for="photoInput">Select Image</label>
-                    <input type="file" id="photoInput" name="profile_photo" accept="image/*" class="visually-hidden">
-                    <?php html_submit('Upload', ['class' => 'btn-primary btn-sm mt-2', 'id' => 'uploadBtn', 'style' => 'display:none;']); ?>
-                    <?php err('profile_photo'); ?>
+                    <?php render_dropzone('profile_photo', avatar_image($user['profile_photo'] ?? null), [
+                        'shape' => 'round',
+                        'hint'  => 'Drag a photo here or click to browse.',
+                    ]); ?>
+
+                    <?php html_submit('Upload Photo', ['class' => 'btn-primary btn-block mt-2']); ?>
                 </form>
             </div>
 

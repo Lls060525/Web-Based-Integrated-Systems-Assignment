@@ -4,6 +4,7 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+require_once __DIR__ . '/../includes/dropzone.php';
 
 $productId = get_int('id');
 $isEdit    = $productId !== null;
@@ -17,7 +18,9 @@ $product = [
     'stock'         => '0',
     'reorder_level' => (string)STOCK_DEFAULT_REORDER_LEVEL,
     'image'       => null,
-    'status'      => 'active',
+    'status'        => 'active',
+    'video_id'      => null,
+    'video_title'   => null,
 ];
 
 if ($isEdit) {
@@ -45,6 +48,8 @@ if (is_post()) {
     $stock       = post('stock');
     $reorder     = post('reorder_level', (string)STOCK_DEFAULT_REORDER_LEVEL);
     $status      = post('status');
+    $videoInput  = post('video_url');
+    $videoTitle  = post('video_title');
 
     // ---------- Server-side validation ----------
     if (v_required('name', $name, 'Product name')) {
@@ -69,9 +74,33 @@ if (is_post()) {
     }
     v_in('status', $status, ['active', 'inactive'], 'Status');
 
+    // ---------- Video ----------
+    // Anything pasted is normalised to an 11-character id, or rejected.
+    $videoId = null;
+
+    if (video_module_ready() && $videoInput !== '') {
+        $videoId = parse_youtube_id($videoInput);
+
+        if ($videoId === null) {
+            add_err('video_url', 'That does not look like a YouTube link. '
+                               . 'Paste the address from the browser bar, for example '
+                               . 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+        }
+    }
+
+    v_max('video_title', $videoTitle, 120, 'Video caption');
+
     // ---------- Photo upload ----------
-    $image = $product['image'];
-    $newImage = save_uploaded_image('product_image', DIR_UPLOAD_PRODUCTS, 'prod');
+    // Once the gallery module is installed it owns products.image
+    // entirely, and photos are managed on admin/product_photos.php.
+    // Ignoring any file posted here keeps sync_primary_photo() the
+    // single writer of that column.
+    $galleryOwnsPhotos = photo_gallery_ready() && $isEdit;
+
+    $image    = $product['image'];
+    $newImage = $galleryOwnsPhotos
+        ? null
+        : save_uploaded_image('product_image', DIR_UPLOAD_PRODUCTS, 'prod');
 
     if ($newImage !== null) {
         $image = $newImage;
@@ -87,12 +116,24 @@ if (is_post()) {
             // ledger. Any change is recorded through Stock Control instead.
             $sql    = 'UPDATE products
                           SET name = ?, category_id = ?, description = ?,
-                              price = ?, image = ?, status = ?';
-            $params = [$name, $categoryId, $description, $price, $image, $status];
+                              price = ?, status = ?';
+            $params = [$name, $categoryId, $description, $price, $status];
+
+            // Only this form writes the column while the gallery is absent.
+            if (!$galleryOwnsPhotos) {
+                $sql      = str_replace('price = ?, status = ?', 'price = ?, image = ?, status = ?', $sql);
+                $params   = [$name, $categoryId, $description, $price, $image, $status];
+            }
 
             if (reorder_level_ready()) {
                 $sql     .= ', reorder_level = ?';
                 $params[] = (int)$reorder;
+            }
+
+            if (video_module_ready()) {
+                $sql     .= ', video_id = ?, video_title = ?';
+                $params[] = $videoId;
+                $params[] = ($videoTitle === '' ? null : $videoTitle);
             }
 
             $sql     .= ' WHERE id = ?';
@@ -135,16 +176,32 @@ if (is_post()) {
                 $vals[] = (int)$reorder;
             }
 
+            if (video_module_ready()) {
+                $cols[] = 'video_id';
+                $vals[] = $videoId;
+
+                $cols[] = 'video_title';
+                $vals[] = ($videoTitle === '' ? null : $videoTitle);
+            }
+
             db_exec(
                 'INSERT INTO products (' . implode(', ', $cols) . ') VALUES ('
                 . implode(', ', array_fill(0, count($cols), '?')) . ')',
                 $vals
             );
 
+            $newProductId = (int)db_last_id();
+
+            // The first photo starts the gallery, so the two never
+            // disagree about what the cover is.
+            if (photo_gallery_ready() && $newImage !== null) {
+                add_product_photo($newProductId, $newImage);
+            }
+
             // Opening stock is the first entry in this product's ledger.
             if ((int)$stock > 0 && stock_module_ready()) {
                 record_stock_movement(
-                    (int)db_last_id(),
+                    $newProductId,
                     'initial',
                     (int)$stock,
                     'Opening stock set when the product was created',
@@ -171,7 +228,15 @@ include __DIR__ . '/../includes/admin_header.php';
 <div class="admin-container admin-container-narrow">
     <div class="admin-header">
         <h2><?= $isEdit ? 'Edit Product' : 'Add New Product' ?></h2>
-        <a href="/admin/products.php" class="btn-outline">&larr; Back to List</a>
+
+        <div class="admin-header-actions">
+            <?php if ($isEdit && spec_module_ready()): ?>
+                <a href="/admin/product_specs.php?id=<?= (int)$productId ?>" class="btn-outline">
+                    <i class="fas fa-list-check"></i> Specifications
+                </a>
+            <?php endif; ?>
+            <a href="/admin/products.php" class="btn-outline">&larr; Back to List</a>
+        </div>
     </div>
 
     <div class="card mt-4 card-padded">
@@ -241,14 +306,76 @@ include __DIR__ . '/../includes/admin_header.php';
                 </div>
             </div>
 
-            <?php field('product_image', 'Product Photo', function () use ($product) { ?>
-                <div class="image-preview-box">
-                    <img src="<?= e(product_image($product['image'])) ?>"
-                         id="productImagePreview" alt="Product preview" class="image-preview">
-                </div>
-                <?php html_file('product_image', ['accept' => 'image/*', 'id' => 'productImageInput']); ?>
-                <small class="form-hint">JPG, PNG, GIF or WEBP, maximum 2 MB. Leave blank to keep the current photo.</small>
-            <?php }); ?>
+            <?php if (video_module_ready()): ?>
+                <fieldset class="form-fieldset">
+                    <legend><i class="fab fa-youtube"></i> Product Video (optional)</legend>
+
+                    <?php field('video_url', 'YouTube Link', function () use ($product) {
+                        // The stored value is an id; show it back as a full
+                        // watch URL so it is obvious what to paste.
+                        $current = is_valid_video_id($product['video_id'] ?? null)
+                            ? youtube_watch_url($product['video_id'])
+                            : '';
+
+                        html_text('video_url', $current, [
+                            'maxlength'   => 200,
+                            'placeholder' => 'https://www.youtube.com/watch?v=...',
+                        ]);
+                        echo '<small class="form-hint">'
+                           . 'Any YouTube address works: watch, youtu.be, shorts or embed. '
+                           . 'Leave empty to remove the video.</small>';
+                    }); ?>
+
+                    <?php field('video_title', 'Caption', function () use ($product) {
+                        html_text('video_title', $product['video_title'] ?? '', [
+                            'maxlength'   => 120,
+                            'placeholder' => 'Hands-on review',
+                        ]);
+                    }); ?>
+
+                    <?php if (is_valid_video_id($product['video_id'] ?? null)): ?>
+                        <div class="video-current">
+                            <img src="<?= e(youtube_thumbnail_url($product['video_id'])) ?>" alt="">
+                            <div>
+                                <strong>Video attached</strong>
+                                <div class="muted small-note">
+                                    ID <code><?= e($product['video_id']) ?></code>
+                                </div>
+                                <a href="<?= e(youtube_watch_url($product['video_id'])) ?>"
+                                   target="_blank" rel="noopener noreferrer"
+                                   class="small-note">Open on YouTube</a>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                </fieldset>
+            <?php endif; ?>
+
+            <?php if (photo_gallery_ready() && $isEdit): ?>
+                <?php field('product_image', 'Photos', function () use ($product, $productId) { ?>
+                    <div class="gallery-link-box">
+                        <img src="<?= e(product_image($product['image'])) ?>" alt="" class="image-preview">
+                        <div>
+                            <strong><?= product_photo_count((int)$productId) ?> photo(s)</strong>
+                            <div class="muted small-note">
+                                Photos are managed on their own page so you can upload several
+                                at once and drag them into order.
+                            </div>
+                            <a href="/admin/product_photos.php?id=<?= (int)$productId ?>"
+                               class="btn-outline btn-sm mt-2">Manage Photos</a>
+                        </div>
+                    </div>
+                <?php }); ?>
+            <?php else: ?>
+                <?php field('product_image', 'Product Photo', function () use ($product) {
+                    render_dropzone('product_image', product_image($product['image']), [
+                        'hint' => 'JPG, PNG, GIF or WEBP, maximum '
+                                . (UPLOAD_MAX_SIZE / 1024 / 1024) . ' MB. '
+                                . (photo_gallery_ready()
+                                    ? 'You can add more photos after saving.'
+                                    : 'Leave empty to keep the current photo.'),
+                    ]);
+                }); ?>
+            <?php endif; ?>
 
             <div class="form-actions text-right">
                 <a href="/admin/products.php" class="btn-outline">Cancel</a>

@@ -28,7 +28,7 @@ composer -V
 
 ```
 cd /d D:\Web-Based-Integrated-Systems-Assignment
-composer require dompdf/dompdf phpmailer/phpmailer
+composer require dompdf/dompdf phpmailer/phpmailer gregwar/captcha
 ```
 
 跑完 `vendor/` 里应该多出 `dompdf/` 和 `phpmailer/` 两个资料夹。

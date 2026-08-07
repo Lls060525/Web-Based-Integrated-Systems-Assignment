@@ -20,8 +20,12 @@ $title  = 'Checkout - ' . APP_NAME;
 $userId = current_user_id();
 
 // ---------- Load and re-validate the cart on the server ----------
+$sigColumn = db_column_exists('cart', 'options_signature')
+    ? 'c.options_signature' : "'' AS options_signature";
+
 $items = db_all(
-    "SELECT c.quantity, p.id AS product_id, p.name, p.price, p.stock, p.status, p.image
+    "SELECT c.quantity, $sigColumn,
+            p.id AS product_id, p.name, p.price, p.stock, p.status, p.image
        FROM cart c
        JOIN products p ON p.id = c.product_id
       WHERE c.user_id = ?",
@@ -34,7 +38,7 @@ if (count($items) === 0) {
 }
 
 $total = 0.0;
-foreach ($items as $item) {
+foreach ($items as $index => $item) {
     if ($item['status'] !== 'active') {
         flash_error($item['name'] . ' is no longer available. Please remove it from your cart.');
         redirect('/cart.php');
@@ -45,7 +49,23 @@ foreach ($items as $item) {
         redirect('/cart.php');
     }
 
-    $total += $item['price'] * $item['quantity'];
+    // Priced with the customer's chosen options folded in, using the
+    // deltas as they stand right now rather than as they stood when the
+    // line went into the cart.
+    $chosen = spec_describe_signature((int)$item['product_id'], (string)$item['options_signature']);
+
+    if (!$chosen['valid']) {
+        flash_error('An option you chose for ' . $item['name'] . ' is no longer offered. '
+                  . 'Please update your cart.');
+        redirect('/cart.php');
+    }
+
+    $item['unit_price']    = (float)$item['price'] + $chosen['delta'];
+    $item['options_label'] = $chosen['label'];
+
+    $items[$index] = $item;
+
+    $total += $item['unit_price'] * $item['quantity'];
 }
 
 $addresses = user_addresses($userId);
@@ -99,9 +119,15 @@ if (is_post() && post('action') === 'place_order') {
             $lineItems[] = [
                 'price_data' => [
                     'currency'     => STRIPE_CURRENCY,
-                    'product_data' => ['name' => $item['name']],
+                    'product_data' => [
+                        // The variant is named on the Stripe page too, so the
+                        // customer sees the same thing there as in the cart.
+                        'name' => $item['name']
+                              . ($item['options_label'] !== '' ? ' (' . $item['options_label'] . ')' : ''),
+                    ],
                     // Stripe works in the smallest currency unit: RM 1.00 = 100 sen.
-                    'unit_amount'  => (int)round($item['price'] * 100),
+                    // unit_price already has the option deltas folded in.
+                    'unit_amount'  => (int)round($item['unit_price'] * 100),
                 ],
                 'quantity' => (int)$item['quantity'],
             ];
@@ -372,10 +398,15 @@ include __DIR__ . '/includes/header.php';
                             <td class="cell-thumb">
                                 <img src="<?= e(product_image($item['image'])) ?>" alt="" class="cart-thumb">
                             </td>
-                            <td><strong><?= e($item['name']) ?></strong></td>
-                            <td><?= e(money($item['price'])) ?></td>
+                            <td>
+                                <strong><?= e($item['name']) ?></strong>
+                                <?php if ($item['options_label'] !== ''): ?>
+                                    <div class="cart-options"><?= e($item['options_label']) ?></div>
+                                <?php endif; ?>
+                            </td>
+                            <td><?= e(money($item['unit_price'])) ?></td>
                             <td>&times; <?= (int)$item['quantity'] ?></td>
-                            <td class="cell-price"><?= e(money($item['price'] * $item['quantity'])) ?></td>
+                            <td class="cell-price"><?= e(money($item['unit_price'] * $item['quantity'])) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -414,7 +445,8 @@ include __DIR__ . '/includes/header.php';
                 </div>
 
                 <?php if (count($addresses) > 0): ?>
-                    <?php html_submit('Place Order and Pay', ['class' => 'btn-primary btn-block btn-lg']); ?>
+                    <?php html_submit('Place Order and Pay', ['class' => 'btn-primary btn-block btn-lg',
+                                        'data-busy' => 'Redirecting to payment...']); ?>
                     <p class="muted small-note mt-2">
                         You will be taken to Stripe to complete payment securely.
                     </p>

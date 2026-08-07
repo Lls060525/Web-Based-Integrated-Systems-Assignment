@@ -79,6 +79,32 @@ include __DIR__ . '/includes/header.php';
                 <a href="/member/addresses.php">My Addresses</a> will not change this order.
             </p>
 
+            <?php // The reference is plain arithmetic, so it is always available.
+                  // Only the QR image itself depends on the library being installed. ?>
+            <h3 class="side-heading">Collection Code</h3>
+
+            <div class="qr-block">
+                <?php if (qr_module_ready()): ?>
+                    <img class="qr-image"
+                         src="/api/qr_image.php?type=order&amp;id=<?= (int)$order['id'] ?>&amp;size=200"
+                         alt="QR code for order <?= (int)$order['id'] ?>"
+                         width="160" height="160">
+                <?php endif; ?>
+
+                <p class="qr-code-text"><?= e(order_short_code((int)$order['id'])) ?></p>
+
+                <p class="muted small-note">
+                    <?php if (qr_module_ready()): ?>
+                        Show this at the counter, or scan it yourself to confirm the
+                        receipt is genuine. The reference underneath works if the code
+                        will not scan.
+                    <?php else: ?>
+                        Show this reference at the counter, or enter it at
+                        <a href="/verify.php">/verify.php</a> to confirm the receipt is genuine.
+                    <?php endif; ?>
+                </p>
+            </div>
+
             <h3 class="side-heading">Receipt</h3>
             <div class="receipt-actions">
                 <a href="/receipt.php?id=<?= (int)$order['id'] ?>" class="btn-outline btn-block">
@@ -94,7 +120,11 @@ include __DIR__ . '/includes/header.php';
                     <form action="/receipt.php?id=<?= (int)$order['id'] ?>&amp;mode=send" method="POST"
                           class="mt-2" data-confirm="Email this receipt to yourself?">
                         <?php csrf_field(); ?>
-                        <?php html_submit('Email It To Me', ['class' => 'btn-outline btn-block']); ?>
+                        <?php form_nonce('receipt_send_' . (int)$order['id']); ?>
+                        <?php html_submit('Email It To Me', [
+                            'class'     => 'btn-outline btn-block',
+                            'data-busy' => 'Sending...',
+                        ]); ?>
                     </form>
                 <?php endif; ?>
 
@@ -125,6 +155,23 @@ include __DIR__ . '/includes/header.php';
         <div class="card card-padded">
             <h3>Items in This Order</h3>
             <?php render_order_lines($lines, (float)$order['total_amount'], $order); ?>
+
+            <?php if (review_module_ready() && in_array($order['status'], REVIEW_ELIGIBLE_ORDER_STATUSES, true)): ?>
+                <div class="review-prompts">
+                    <h4>Share your experience</h4>
+                    <?php foreach ($lines as $line): ?>
+                        <?php $written = find_user_review($userId, (int)$line['product_id']); ?>
+                        <a href="/review_form.php?product=<?= (int)$line['product_id'] ?>"
+                           class="review-prompt">
+                            <img src="<?= e(product_image($line['image'])) ?>" alt="" class="table-thumb">
+                            <span class="review-prompt-name"><?= e($line['product_name']) ?></span>
+                            <span class="btn-outline btn-sm">
+                                <?= $written ? 'Edit review' : 'Write a review' ?>
+                            </span>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
         </div>
 
         <div class="card card-padded mt-4">

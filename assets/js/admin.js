@@ -20,45 +20,94 @@ $(function () {
      * The server returns only the <tr> rows for an AJAX request.
      */
 
-    var searchTimer = null;
+    var searchTimer    = null;
+    var searchSeq      = 0;
+    var searchRendered = 0;
 
-    $('.admin-search-form').on('submit', function (e) {
+    /* OPT-IN IS STRICT.
+     *
+     * This used to bind to every .admin-search-input on the site and fall
+     * back to '.admin-table tbody' when no target was declared. On a page
+     * whose PHP has no is_ajax() branch, the request came back as the
+     * WHOLE page -- layout, sidebar and all -- and got injected into the
+     * table body, so the admin panel appeared nested inside itself.
+     *
+     * Four pages were in that state: stock, reviews, login security and
+     * batch delete. A page now opts in by declaring BOTH halves of the
+     * contract:
+     *
+     *   PHP : if (is_ajax()) { ...render rows only...; exit; }
+     *   HTML: <form class="admin-search-form" data-target="#someTbody">
+     *
+     * Anything without data-target is left alone and submits normally,
+     * which is a working plain search rather than a broken clever one. */
+    var $liveForms = $('.admin-search-form[data-target]');
+
+    /* One function, three callers: typing (debounced), pressing the Search
+     * button, and pressing Enter. The button used to be inert -- its submit
+     * was swallowed and nothing else happened -- so on a slow first
+     * keystroke it looked like the search had simply not worked. */
+    function runSearch($form) {
+        var $input   = $form.find('.admin-search-input');
+        var query    = $input.val();
+        var $tbody   = $($form.data('target'));
+
+        if ($tbody.length === 0) { return; }
+
+        var colspan = $tbody.closest('table').find('thead th').length || 6;
+
+        // Ignore an answer that is no longer the current query. Without
+        // this a slow early request can land after a fast later one and
+        // put stale rows back on screen.
+        var mySeq = ++searchSeq;
+
+        $tbody.html(
+            '<tr><td colspan="' + colspan + '" class="table-empty">Searching...</td></tr>'
+        );
+
+        $.ajax({
+            url: window.location.pathname,
+            type: 'GET',
+            data: { q: query },
+            dataType: 'html'
+        }).done(function (response) {
+            if (mySeq < searchRendered) { return; }
+            searchRendered = mySeq;
+
+            $tbody.html(response);
+
+            // Keep the address bar in sync without reloading the page.
+            var newUrl = window.location.pathname
+                       + (query ? '?q=' + encodeURIComponent(query) : '');
+            window.history.replaceState({ path: newUrl }, '', newUrl);
+
+        }).fail(function (xhr, status) {
+            if (status === 'abort') { return; }
+
+            $tbody.html(
+                '<tr><td colspan="' + colspan + '" class="table-empty is-error">'
+                + 'Could not load results. Please try again.</td></tr>'
+            );
+        });
+    }
+
+    $liveForms.on('submit', function (e) {
+        // Prevented BEFORE the search runs, so the double-submit guard in
+        // main.js sees isDefaultPrevented() and leaves the button alone.
+        // Without that it would disable the button and swap its label to
+        // "Working...", and nothing would ever put it back -- there is no
+        // page load coming.
         e.preventDefault();
-    });
-
-    $('.admin-search-input').on('input', function () {
-        var query    = $(this).val();
-        var selector = $(this).closest('.admin-search-form').data('target') || '.admin-table tbody';
-        var $tbody   = $(selector);
-        var colspan  = $tbody.closest('table').find('thead th').length || 6;
 
         window.clearTimeout(searchTimer);
+        runSearch($(this));
+    });
 
-        searchTimer = window.setTimeout(function () {
-            $tbody.html(
-                '<tr><td colspan="' + colspan + '" class="table-empty">Searching...</td></tr>'
-            );
+    $liveForms.find('.admin-search-input').on('input', function () {
+        var $form = $(this).closest('.admin-search-form');
 
-            $.ajax({
-                url: window.location.pathname,
-                type: 'GET',
-                data: { q: query },
-                success: function (response) {
-                    $tbody.html(response);
-
-                    // Keep the address bar in sync without reloading the page.
-                    var newUrl = window.location.pathname
-                               + (query ? '?q=' + encodeURIComponent(query) : '');
-                    window.history.replaceState({ path: newUrl }, '', newUrl);
-                },
-                error: function () {
-                    $tbody.html(
-                        '<tr><td colspan="' + colspan + '" class="table-empty is-error">'
-                        + 'Error fetching data.</td></tr>'
-                    );
-                }
-            });
-        }, 300);
+        window.clearTimeout(searchTimer);
+        searchTimer = window.setTimeout(function () { runSearch($form); }, 300);
     });
 
     /* ---------- Admin profile tabs ---------- */
@@ -91,6 +140,72 @@ $(function () {
         });
     }
 
+    /* ---------- Product photo reordering ---------- */
+    // Native HTML5 drag and drop on the tiles. The new order is written
+    // into a hidden field and saved by a normal form POST, so the server
+    // side stays an ordinary CSRF-protected request.
+
+    var $grid = $('#photoGrid');
+
+    if ($grid.length) {
+        var dragged = null;
+
+        $('#saveOrderBtn').prop('disabled', true);
+
+        $grid.on('dragstart', '.photo-tile', function (e) {
+            dragged = this;
+            $(this).addClass('is-dragging');
+
+            // Firefox will not start a drag without data being set.
+            e.originalEvent.dataTransfer.effectAllowed = 'move';
+            e.originalEvent.dataTransfer.setData('text/plain', '');
+        });
+
+        $grid.on('dragend', '.photo-tile', function () {
+            $(this).removeClass('is-dragging');
+            $grid.find('.photo-tile').removeClass('is-over');
+        });
+
+        $grid.on('dragover', '.photo-tile', function (e) {
+            e.preventDefault();
+            e.originalEvent.dataTransfer.dropEffect = 'move';
+
+            if (this !== dragged) {
+                $(this).addClass('is-over');
+            }
+        });
+
+        $grid.on('dragleave', '.photo-tile', function () {
+            $(this).removeClass('is-over');
+        });
+
+        $grid.on('drop', '.photo-tile', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            $(this).removeClass('is-over');
+
+            if (!dragged || this === dragged) { return; }
+
+            // Insert before or after depending on which way it moved.
+            var tiles      = $grid.find('.photo-tile').toArray();
+            var fromIndex  = tiles.indexOf(dragged);
+            var toIndex    = tiles.indexOf(this);
+
+            if (fromIndex < toIndex) {
+                $(this).after(dragged);
+            } else {
+                $(this).before(dragged);
+            }
+
+            var order = $grid.find('.photo-tile').map(function () {
+                return $(this).data('id');
+            }).get();
+
+            $('#photoOrder').val(order.join(','));
+            $('#saveOrderBtn').prop('disabled', false).addClass('is-pending');
+        });
+    }
+
     /* ---------- Voucher form: the value field means two things ---------- */
 
     var $voucherType = $('#voucherType');
@@ -110,23 +225,91 @@ $(function () {
         $voucherType.on('change', syncVoucherType);
     }
 
-    /* ---------- Live preview for image pickers ---------- */
-    // Each pair is [file input, <img> to update].
+    /* Image previews now live in assets/js/dropzone.js, which handles
+     * every upload field in one place. The old per-field handlers were
+     * removed rather than left to fight over the same elements. */
 
-    function bindImagePreview(inputSelector, previewSelector) {
-        $(inputSelector).on('change', function () {
-            var file = this.files[0];
-            if (!file) { return; }
+    /* ---------- Batch tools ---------- */
+    // Select-all, live count, and a guard against submitting an empty
+    // selection. All delegated, so nothing here cares whether the table
+    // was rendered by PHP or swapped in by the AJAX search.
 
-            var reader = new FileReader();
-            reader.onload = function (evt) {
-                $(previewSelector).attr('src', evt.target.result).show();
-            };
-            reader.readAsDataURL(file);
+    var $selectAll = $('#batchSelectAll');
+
+    if ($selectAll.length) {
+        var refreshBatchCount = function () {
+            var $boxes   = $('.batch-select');
+            var $checked = $boxes.filter(':checked');
+            var n        = $checked.length;
+
+            $('#batchCount').text(n + ' selected');
+
+            // Indeterminate is the honest state when some but not all are
+            // ticked; without it the header box lies about the selection.
+            $selectAll.prop('checked', n > 0 && n === $boxes.length);
+            $selectAll.prop('indeterminate', n > 0 && n < $boxes.length);
+
+            $('.batch-row-selected').removeClass('batch-row-selected');
+            $checked.closest('tr').addClass('batch-row-selected');
+        };
+
+        $(document).on('change', '#batchSelectAll', function () {
+            $('.batch-select').prop('checked', $(this).prop('checked'));
+            refreshBatchCount();
         });
+
+        $(document).on('change', '.batch-select', refreshBatchCount);
+
+        // Shift-click ticks a whole run, which is the difference between
+        // this being usable on 200 rows and not.
+        var lastIndex = null;
+
+        $(document).on('click', '.batch-select', function (e) {
+            var $boxes = $('.batch-select');
+            var index  = $boxes.index(this);
+
+            if (e.shiftKey && lastIndex !== null) {
+                var start = Math.min(lastIndex, index);
+                var end   = Math.max(lastIndex, index);
+                var state = $(this).prop('checked');
+
+                $boxes.slice(start, end + 1).prop('checked', state);
+                refreshBatchCount();
+            }
+
+            lastIndex = index;
+        });
+
+        $(document).on('submit', 'form', function (e) {
+            var $form = $(this);
+
+            if ($form.find('.batch-select').length === 0) {
+                return;
+            }
+
+            if ($form.find('.batch-select:checked').length === 0) {
+                e.preventDefault();
+                window.alert('Select at least one product first.');
+            }
+        });
+
+        refreshBatchCount();
     }
 
-    bindImagePreview('#productImageInput', '#productImagePreview');
-    bindImagePreview('#adminPhotoInput',   '#adminPhotoPreview');
+    // Percentage operations get a different hint from ringgit ones.
+    var $batchOperation = $('#operation');
+
+    if ($batchOperation.length && $('#value').length) {
+        var syncBatchOperation = function () {
+            var op = $batchOperation.val();
+            var isPercent = op === 'percent_up' || op === 'percent_down';
+            var isFactor  = op === 'multiply';
+
+            $('#value').attr('max', isPercent ? '100' : (isFactor ? '100' : '999999.99'));
+        };
+
+        syncBatchOperation();
+        $batchOperation.on('change', syncBatchOperation);
+    }
 
 });

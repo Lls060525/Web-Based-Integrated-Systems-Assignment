@@ -138,7 +138,90 @@ function revoke_reset_tokens(int $userId): void
 /** Build the absolute reset URL that gets emailed or displayed. */
 function reset_url(string $token): string
 {
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    return $scheme . '://' . $host . '/auth/reset_password.php?token=' . urlencode($token);
+    return base_url() . '/auth/reset_password.php?token=' . urlencode($token);
+}
+
+// ============================================================
+// One-shot form guards
+//
+// CSRF tokens deliberately last for the whole session, because pages
+// like the cart post with the same token over and over. That makes them
+// useless against a DOUBLE SUBMIT: the second click carries a perfectly
+// valid token.
+//
+// So actions with a real side effect -- sending mail, charging, writing
+// a batch -- carry a second, single-use nonce as well.
+// ============================================================
+
+/**
+ * Render a one-use hidden field for this action.
+ *
+ * Called inside the <form>. Each render mints a fresh value, so opening
+ * the page in two tabs gives two independently valid nonces.
+ */
+function form_nonce(string $action): void
+{
+    $nonce = bin2hex(random_bytes(16));
+
+    $_SESSION['form_nonce'][$action][] = $nonce;
+
+    // Bounded, or a session could grow forever on a page somebody keeps
+    // refreshing. Ten open tabs of the same form is already generous.
+    if (count($_SESSION['form_nonce'][$action]) > 10) {
+        array_shift($_SESSION['form_nonce'][$action]);
+    }
+
+    echo '<input type="hidden" name="_nonce" value="' . e($nonce) . '">';
+}
+
+/**
+ * Consume the nonce. True the first time, false for every replay.
+ *
+ * A second click, a browser back-then-resubmit and a refresh of the POST
+ * all arrive with the same nonce, and only the first one finds it.
+ */
+function form_nonce_valid(string $action): bool
+{
+    $posted = post('_nonce');
+    $held   = $_SESSION['form_nonce'][$action] ?? [];
+
+    if ($posted === '' || $held === []) {
+        return false;
+    }
+
+    foreach ($held as $index => $nonce) {
+        if (hash_equals($nonce, $posted)) {
+            unset($_SESSION['form_nonce'][$action][$index]);
+
+            // Reindexed so the bound above keeps counting correctly.
+            $_SESSION['form_nonce'][$action] = array_values($_SESSION['form_nonce'][$action]);
+
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Rate limit an action per session.
+ *
+ * The nonce stops one form being submitted twice, but not somebody
+ * reloading the page to get a fresh one. Outbound email in particular
+ * needs an actual floor between attempts.
+ *
+ * @return int seconds still to wait, 0 when allowed
+ */
+function action_cooldown(string $key, int $seconds): int
+{
+    $last = $_SESSION['action_last'][$key] ?? 0;
+    $left = $seconds - (time() - $last);
+
+    return $left > 0 ? $left : 0;
+}
+
+/** Record that the action just ran, starting its cooldown. */
+function action_touch(string $key): void
+{
+    $_SESSION['action_last'][$key] = time();
 }

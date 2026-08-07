@@ -39,6 +39,20 @@ function post(string $key, string $default = ''): string
     return is_array($_POST[$key] ?? null) ? $default : trim((string)($_POST[$key] ?? $default));
 }
 
+/**
+ * Absolute base URL of this installation, no trailing slash.
+ *
+ * Was duplicated in lib/security.php and lib/receipt.php; QR codes need
+ * it too, so it lives in one place now.
+ */
+function base_url(): string
+{
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
+
+    return $scheme . '://' . $host;
+}
+
 /** Read a trimmed GET value. */
 function get(string $key, string $default = ''): string
 {
@@ -199,11 +213,24 @@ function html_attr(array $attr): string
     return $out;
 }
 
-/** Generic <input> generator used by the typed helpers below. */
+/**
+ * Generic <input> generator used by the typed helpers below.
+ *
+ * The id defaults to the field name but a caller may override it.
+ *
+ * This used to print id="$key" and THEN append the caller's attributes,
+ * which emitted the attribute twice. A browser keeps the first one, so
+ * passing ['id' => 'somethingElse'] silently had no effect and every
+ * jQuery selector written against that id matched nothing. Pulling the
+ * id out of $attr first is what makes the override real.
+ */
 function html_input(string $type, string $key, $value = '', array $attr = []): void
 {
+    $id = $attr['id'] ?? $key;
+    unset($attr['id']);
+
     $attr['class'] = trim(($attr['class'] ?? 'form-control') . (has_err($key) ? ' is-invalid' : ''));
-    echo '<input type="' . e($type) . '" id="' . e($key) . '" name="' . e($key) . '"'
+    echo '<input type="' . e($type) . '" id="' . e($id) . '" name="' . e($key) . '"'
        . ' value="' . e($value) . '"' . html_attr($attr) . '>';
 }
 
@@ -235,15 +262,21 @@ function html_hidden(string $key, $value): void
 
 function html_file(string $key, array $attr = []): void
 {
+    $id = $attr['id'] ?? $key;
+    unset($attr['id']);
+
     $attr['class'] = trim(($attr['class'] ?? 'form-control') . (has_err($key) ? ' is-invalid' : ''));
-    echo '<input type="file" id="' . e($key) . '" name="' . e($key) . '"' . html_attr($attr) . '>';
+    echo '<input type="file" id="' . e($id) . '" name="' . e($key) . '"' . html_attr($attr) . '>';
 }
 
 function html_textarea(string $key, $default = '', array $attr = []): void
 {
+    $id = $attr['id'] ?? $key;
+    unset($attr['id']);
+
     $attr['class'] = trim(($attr['class'] ?? 'form-control') . (has_err($key) ? ' is-invalid' : ''));
     $attr['rows']  = $attr['rows'] ?? 4;
-    echo '<textarea id="' . e($key) . '" name="' . e($key) . '"' . html_attr($attr) . '>'
+    echo '<textarea id="' . e($id) . '" name="' . e($key) . '"' . html_attr($attr) . '>'
        . e(temp($key, $default)) . '</textarea>';
 }
 
@@ -252,10 +285,13 @@ function html_textarea(string $key, $default = '', array $attr = []): void
  */
 function html_select(string $key, array $items, $default = '', array $attr = [], string $placeholder = ''): void
 {
+    $id = $attr['id'] ?? $key;
+    unset($attr['id']);
+
     $attr['class'] = trim(($attr['class'] ?? 'form-control') . (has_err($key) ? ' is-invalid' : ''));
     $selected = (string)temp($key, $default);
 
-    echo '<select id="' . e($key) . '" name="' . e($key) . '"' . html_attr($attr) . '>';
+    echo '<select id="' . e($id) . '" name="' . e($key) . '"' . html_attr($attr) . '>';
     if ($placeholder !== '') {
         echo '<option value="">' . e($placeholder) . '</option>';
     }
@@ -400,6 +436,14 @@ function save_uploaded_image(string $key, string $targetDir, string $prefix): ?s
     if (!move_uploaded_file($file['tmp_name'], $targetDir . $filename)) {
         add_err($key, 'Server error: failed to save the uploaded file.');
         return null;
+    }
+
+    // Phone photos carry an EXIF orientation tag that browsers honour but
+    // GD ignores. Baking the rotation in now means the stored file is
+    // genuinely upright, so every later operation starts from truth.
+    // Defined in lib/image.php; a no-op when GD is unavailable.
+    if (function_exists('auto_orient_image')) {
+        auto_orient_image($targetDir . $filename);
     }
 
     return $filename;

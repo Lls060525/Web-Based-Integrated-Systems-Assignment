@@ -7,6 +7,8 @@
 // catalogue markup exists in exactly one place.
 // ============================================================
 
+require_once __DIR__ . '/review_parts.php';
+
 if (!function_exists('render_product_card')) {
 
     function render_product_card(array $p): void
@@ -34,6 +36,10 @@ if (!function_exists('render_product_card')) {
                     <?php if (!empty($p['category_name'])): ?>
                         <span class="badge"><?= e($p['category_name']) ?></span>
                     <?php endif; ?>
+                    <?php if (review_module_ready()): ?>
+                        <?php render_rating_inline(rating_summary((int)$p['id'])); ?>
+                    <?php endif; ?>
+
                     <div class="price"><?= e(money($p['price'])) ?></div>
 
                     <?php $state = stock_state($p); ?>
@@ -45,7 +51,19 @@ if (!function_exists('render_product_card')) {
                 </div>
             </a>
             <div class="card-actions">
-                <?php if ($inStock): ?>
+                <?php
+                    // A product the customer has to make a choice about cannot
+                    // be added from a grid: there is nowhere to pick the colour.
+                    // Sending them to the detail page is honest, where posting
+                    // an arbitrary default on their behalf would not be.
+                    $needsChoice = $inStock && product_selectable_specs((int)$p['id']) !== [];
+                ?>
+
+                <?php if ($needsChoice): ?>
+                    <a href="/product_detail.php?id=<?= (int)$p['id'] ?>" class="btn-primary btn-block">
+                        Choose Options
+                    </a>
+                <?php elseif ($inStock): ?>
                     <button type="button" class="add-to-cart btn-primary btn-block"
                             data-id="<?= (int)$p['id'] ?>">Add to Cart</button>
                 <?php else: ?>
@@ -57,7 +75,12 @@ if (!function_exists('render_product_card')) {
     }
 
     /** Render a whole grid of products, or an empty-state message. */
-    function render_product_grid(array $products, string $emptyMessage = 'No products found.'): void
+    /**
+     * @param string|null $id  DOM id for the grid, so "load more" has
+     *                         somewhere to append the next page into.
+     */
+    function render_product_grid(array $products, string $emptyMessage = 'No products found.',
+                                 ?string $id = null): void
     {
         if (count($products) === 0) {
             echo '<div class="card empty-state-box"><h3 class="empty-state-title">'
@@ -65,7 +88,7 @@ if (!function_exists('render_product_card')) {
             return;
         }
 
-        echo '<div class="grid">';
+        echo '<div class="grid"' . ($id !== null ? ' id="' . e($id) . '"' : '') . '>';
         foreach ($products as $p) {
             render_product_card($p);
         }

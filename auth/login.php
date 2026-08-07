@@ -8,6 +8,7 @@
 // ============================================================
 
 require_once __DIR__ . '/../lib/init.php';
+require_once __DIR__ . '/../includes/captcha_field.php';
 
 require_guest();          // already signed in? go straight to your area
 
@@ -15,6 +16,17 @@ $title        = 'Login - ' . APP_NAME;
 $is_auth_page = true;
 
 $lock = ['locked' => false, 'remaining_attempts' => LOGIN_MAX_ATTEMPTS, 'seconds_left' => 0, 'message' => ''];
+
+/**
+ * A CAPTCHA only appears once this address has already failed.
+ *
+ * Showing one to everybody punishes the honest majority for the sake of
+ * the rare bot. Tying it to the failure counter that already exists
+ * means a member who types their password correctly never sees one,
+ * while a script working through a list meets one immediately.
+ */
+$needCaptcha = captcha_ready()
+    && failed_attempts_for_email(is_post() ? post('email') : '') >= CAPTCHA_ON_LOGIN_AFTER;
 
 if (is_post()) {
     csrf_check();
@@ -31,7 +43,17 @@ if (is_post()) {
     if (no_err()) {
         $lock = login_lock_status($email);
 
-        if ($lock['locked']) {
+        // Verified before the password so a bot cannot use response
+        // timing to tell a real address from an invented one.
+        if ($needCaptcha) {
+            captcha_verify('login');
+        }
+
+        if (!no_err()) {
+            // The CAPTCHA failed; record the attempt and stop here.
+            record_login_attempt($email, false);
+
+        } elseif ($lock['locked']) {
             // Refuse before touching the password. A locked account must
             // not be testable even by someone holding the right one.
             add_err('email', $lock['message']);
@@ -56,6 +78,7 @@ if (is_post()) {
                 $message = 'Invalid email or password.';
 
                 if ($lock['locked']) {
+                    // This failure was the one that crossed the threshold.
                     $message = $lock['message'];
                 } elseif ($lock['remaining_attempts'] <= LOGIN_MAX_ATTEMPTS - 1) {
                     $message .= ' You have ' . $lock['remaining_attempts']
@@ -88,13 +111,26 @@ if (is_post()) {
                     );
                 }
 
+                captcha_clear('login');
                 login_user($user);
+                $_SESSION['auth_via'] = 'password';
+
+                // Only issue the long-lived cookie when it was asked for.
+                if (post('remember') === '1') {
+                    remember_issue((int)$user['id']);
+                }
+
                 flash_success('Welcome back, ' . $user['name'] . '.');
                 redirect(home_url_for_role($user['role']));
             }
         }
     }
 }
+
+// A failed attempt may have crossed the threshold, so re-evaluate
+// before rendering or the CAPTCHA would only appear one request late.
+$needCaptcha = captcha_ready()
+    && failed_attempts_for_email(post('email')) >= CAPTCHA_ON_LOGIN_AFTER;
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -134,6 +170,30 @@ include __DIR__ . '/../includes/header.php';
             <?php field('password', 'Password', function () {
                 html_password('password', ['required' => true]);
             }, true); ?>
+
+            <?php if ($needCaptcha): ?>
+                <p class="muted small-note captcha-reason">
+                    <i class="fas fa-shield-halved"></i>
+                    A sign-in for this address has already failed, so please confirm
+                    you are not a robot.
+                </p>
+                <?php render_captcha_field('login'); ?>
+            <?php endif; ?>
+
+            <?php if (remember_ready()): ?>
+                <div class="form-group form-check">
+                    <label for="remember" class="check-label">
+                        <input type="checkbox" name="remember" id="remember" value="1"
+                               <?= post('remember') === '1' ? 'checked' : '' ?>>
+                        <span>
+                            Keep me signed in for <?= REMEMBER_DAYS ?> days
+                            <small class="form-hint">
+                                Do not tick this on a shared or public computer.
+                            </small>
+                        </span>
+                    </label>
+                </div>
+            <?php endif; ?>
 
             <div class="form-actions">
                 <?php html_submit('Log In', [

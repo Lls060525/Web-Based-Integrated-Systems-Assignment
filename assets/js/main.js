@@ -53,6 +53,96 @@ $(function () {
         }
     });
 
+    /* NOTE ON ORDER: this is registered AFTER the confirmation handlers
+     * on purpose. Both are delegated on document, so they run in
+     * registration order. If the guard ran first it would mark the form
+     * busy and disable its buttons, and then a cancelled confirm dialog
+     * would leave that form permanently dead. Cancelling calls
+     * stopImmediatePropagation(), so with this order the guard is simply
+     * never reached. */
+    /* ---------- Double submit guard ---------- */
+    /*
+     * One click, one request. Applies to every form on the site.
+     *
+     * Two details that are easy to get wrong:
+     *
+     * 1. The button is NOT disabled synchronously. A disabled control is
+     *    excluded from the form data, so disabling it before the browser
+     *    serialises the form would silently drop the submit button's own
+     *    name and value. Disabling happens on the next tick instead,
+     *    after serialisation.
+     *
+     * 2. The form is flagged busy immediately, so a genuine double click
+     *    is stopped even in the gap before the button is disabled.
+     *
+     * This is only the visible half. Actions that really matter also
+     * carry a one-use nonce checked by PHP, because a disabled attribute
+     * lasts exactly as long as it takes to open dev tools.
+     */
+    $(document).on('submit', 'form', function (e) {
+        var $form = $(this);
+
+        /* An AJAX form has already called preventDefault() by the time this
+         * runs: handlers bound directly on the element fire before a
+         * delegated one on document. Such a form is NOT navigating away,
+         * so there is nothing to guard against -- and disabling its button
+         * would leave it stuck on "Working..." forever, because no page
+         * load ever arrives to reset it.
+         *
+         * That is exactly what happened to the admin live search: the
+         * button span and never came back. */
+        if (e.isDefaultPrevented()) {
+            return;
+        }
+
+        if ($form.data('submitting')) {
+            e.preventDefault();
+            return false;
+        }
+
+        // A form the confirm dialog just cancelled never gets here,
+        // because that handler stops propagation first.
+        $form.data('submitting', true);
+
+        var $buttons = $form.find('button[type="submit"], input[type="submit"]');
+
+        window.setTimeout(function () {
+            $buttons.each(function () {
+                var $b = $(this);
+
+                if ($b.is('button')) {
+                    $b.data('idle-text', $b.text());
+                    $b.text($b.data('busy') || 'Working...');
+                } else {
+                    $b.data('idle-text', $b.val());
+                    $b.val($b.data('busy') || 'Working...');
+                }
+
+                $b.prop('disabled', true).addClass('is-busy');
+            });
+        }, 0);
+
+        // A failed request or a validation redirect brings the page back
+        // from cache with the button still disabled, which looks broken.
+        // pageshow fires on a back/forward restore, so the form is reset.
+        return true;
+    });
+
+    $(window).on('pageshow', function () {
+        $('form').removeData('submitting');
+
+        $('.is-busy').each(function () {
+            var $b = $(this);
+            var idle = $b.data('idle-text');
+
+            if (idle !== undefined) {
+                if ($b.is('button')) { $b.text(idle); } else { $b.val(idle); }
+            }
+
+            $b.prop('disabled', false).removeClass('is-busy');
+        });
+    });
+
     /* ---------- Auto-submitting controls ---------- */
     // Replaces every inline onchange="this.form.submit()".
 
@@ -80,17 +170,30 @@ $(function () {
         var $btn = $(this);
         var originalText = $btn.text();
 
+        // Customer-selected specs travel as options[attributeId] = value.
+        // The server re-checks every one of them against what the product
+        // actually offers, so this is convenience, not trust.
+        var payload = {
+            action: 'add',
+            product_id: $btn.data('id'),
+            csrf_token: $('meta[name="csrf-token"]').attr('content')
+        };
+
+        $('.js-spec-option').each(function () {
+            var $field = $(this);
+
+            if ($field.is(':radio') && !$field.prop('checked')) { return; }
+
+            payload['options[' + $field.data('attribute') + ']'] = $field.val();
+        });
+
         $btn.text('Adding...').prop('disabled', true);
 
         $.ajax({
             url: '/api/cart_action.php',
             type: 'POST',
             dataType: 'json',
-            data: {
-                action: 'add',
-                product_id: $btn.data('id'),
-                csrf_token: $('meta[name="csrf-token"]').attr('content')
-            },
+            data: payload,
             success: function (res) {
                 if (res.status === 'success') {
                     $('.cart-count').text(res.cart_count);
@@ -113,6 +216,95 @@ $(function () {
         });
     });
 
+    /* ---------- Product configurator ---------- */
+    // Live price, a running summary, and swapping the main photo when a
+    // colour is chosen. The authoritative total is still the server's;
+    // everything here is the label the customer reads while deciding.
+
+    var $productPrice = $('#productPrice');
+
+    if ($productPrice.length && $('.js-spec-option').length) {
+        var basePrice = parseFloat($productPrice.data('base')) || 0;
+
+        // Matches PHP's money(): two decimals, then thousands separators,
+        // so the page never shows 3349.00 beside RM 3,349.00.
+        var asMoney = function (value) {
+            var parts = value.toFixed(2).split('.');
+            parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+            return 'RM ' + parts.join('.');
+        };
+
+        var refreshConfig = function () {
+            var delta = 0;
+            var $lines = $('#configSummaryLines').empty();
+
+            $lines.append(
+                $('<div>').addClass('config-line').append(
+                    $('<span>').text($('.product-detail-title').first().text() || 'Base price'),
+                    $('<span>').text(asMoney(basePrice))
+                )
+            );
+
+            $('.js-spec-option:checked').each(function () {
+                var $field = $(this);
+                var d = parseFloat($field.data('delta')) || 0;
+
+                delta += d;
+
+                // The chip beside the step heading, Apple style.
+                $('.config-chosen[data-for="' + $field.data('attribute') + '"]')
+                    .text($field.data('label'));
+
+                $lines.append(
+                    $('<div>').addClass('config-line').append(
+                        $('<span>').text($field.data('label')),
+                        $('<span>').text(d === 0 ? 'Included' : (d > 0 ? '+' : '') + asMoney(d))
+                    )
+                );
+            });
+
+            var total = basePrice + delta;
+
+            $productPrice.text(asMoney(total));
+            $('#configTotal').text(asMoney(total));
+
+            // The sticky bar repeats the selection and the total, so the
+            // customer can keep scrolling through specs and reviews
+            // without losing sight of what they have configured.
+            $('#configBarTotal').text(asMoney(total));
+            $('#configBarSpec').text(
+                $('.js-spec-option:checked').map(function () {
+                    return $(this).data('label');
+                }).get().join(' / ')
+            );
+
+            // Revealed only once it has something to say, so it does not
+            // flash an unconfigured state while the page is still loading.
+            $('#configBar').prop('hidden', false);
+        };
+
+        // Choosing a colour drives the existing gallery rather than a
+        // second image widget: clicking the thumbnail reuses all of the
+        // slider's own logic, including the counter and the active state.
+        var showSlide = function ($field) {
+            var slide = $field.data('slide');
+
+            if (slide === undefined || slide === null) { return; }
+
+            $('#productGallery').find('.gallery-thumb[data-index="' + slide + '"]').trigger('click');
+        };
+
+        $(document).on('change', '.js-spec-option', function () {
+            refreshConfig();
+            showSlide($(this));
+        });
+
+        refreshConfig();
+
+        // On load, jump to the photo of whichever option starts selected.
+        $('.js-spec-option:checked').each(function () { showSlide($(this)); });
+    }
+
     /* ---------- Profile: sidebar tab switching ---------- */
 
     $('.profile-nav a[href^="#"]').on('click', function (e) {
@@ -125,19 +317,7 @@ $(function () {
         $($(this).attr('href')).fadeIn(300);
     });
 
-    /* ---------- Profile: live photo preview ---------- */
-
-    $('#photoInput').on('change', function () {
-        var file = this.files[0];
-        if (!file) { return; }
-
-        var reader = new FileReader();
-        reader.onload = function (evt) {
-            $('#avatarPreview').attr('src', evt.target.result);
-            $('#uploadBtn').fadeIn(200);
-        };
-        reader.readAsDataURL(file);
-    });
+    /* Profile photo preview is handled by assets/js/dropzone.js. */
 
     /* ---------- Profile: only offer Save when something changed ---------- */
 
@@ -201,8 +381,11 @@ $(function () {
 
         var $btn = $(this);
 
-        if ($btn.data('busy')) { return; }
-        $btn.data('busy', true);
+        // 'submitting', not 'busy': data-busy is now the attribute that
+        // holds a button's working LABEL, so reusing the name for an
+        // in-flight flag would be a trap for the next reader.
+        if ($btn.data('submitting')) { return; }
+        $btn.data('submitting', true);
 
         $.ajax({
             url: '/api/wishlist_action.php',
@@ -252,7 +435,7 @@ $(function () {
                 showToast('Server error. Please try again.', 'error');
             },
             complete: function () {
-                $btn.data('busy', false);
+                $btn.data('submitting', false);
             }
         });
     });
@@ -480,6 +663,170 @@ $(function () {
 
     $(document).on('click', '.js-points-remove', function () {
         pointsRequest({ action: 'remove' }, $(this));
+    });
+
+    /* ---------- Star rating picker ---------- */
+    // Progressive enhancement: the radio buttons work on their own,
+    // this only makes them look and behave like stars.
+
+    var $starInput = $('#starInput');
+
+    if ($starInput.length) {
+        var labels = {
+            1: 'Poor', 2: 'Fair', 3: 'Good', 4: 'Very good', 5: 'Excellent'
+        };
+
+        var paintStars = function (value) {
+            $starInput.find('i').each(function () {
+                var star = parseInt($(this).data('star'), 10);
+                $(this).toggleClass('fas', star <= value)
+                       .toggleClass('far', star > value);
+            });
+        };
+
+        var selectedValue = function () {
+            return parseInt($starInput.find('input:checked').val(), 10) || 0;
+        };
+
+        // Hovering previews, leaving restores the real choice.
+        $starInput.on('mouseenter', 'i', function () {
+            paintStars(parseInt($(this).data('star'), 10));
+        });
+
+        $starInput.on('mouseleave', function () {
+            paintStars(selectedValue());
+        });
+
+        $starInput.on('change', 'input', function () {
+            var value = parseInt($(this).val(), 10);
+            paintStars(value);
+            $('#starLabel').text(labels[value] || '');
+        });
+
+        paintStars(selectedValue());
+    }
+
+    /* ---------- Review body character counter ---------- */
+
+    var $reviewBody = $('#reviewBody');
+
+    if ($reviewBody.length) {
+        var updateCount = function () {
+            $('#bodyCount').text($reviewBody.val().length);
+        };
+
+        $reviewBody.on('input', updateCount);
+        updateCount();
+    }
+
+    /* ---------- Product photo slider ---------- */
+    // Hand-written: it is a list of slides plus an active index.
+
+    var $gallery = $('#productGallery');
+
+    if ($gallery.length) {
+        var $slides = $gallery.find('.gallery-slide');
+        var $thumbs = $gallery.find('.gallery-thumb');
+        var total   = $slides.length;
+        var index   = 0;
+
+        function show(next) {
+            // Wrap around at both ends.
+            index = (next + total) % total;
+
+            $slides.removeClass('is-active').eq(index).addClass('is-active');
+            $thumbs.removeClass('is-active').eq(index).addClass('is-active');
+            $gallery.find('.gallery-current').text(index + 1);
+
+            // Let the video handler know it should stop playing.
+            $(document).trigger('gallery:change');
+        }
+
+        $gallery.on('click', '.gallery-next', function () { show(index + 1); });
+        $gallery.on('click', '.gallery-prev', function () { show(index - 1); });
+
+        $gallery.on('click', '.gallery-thumb', function (e) {
+            e.preventDefault();
+            show(parseInt($(this).data('index'), 10));
+        });
+
+        // Arrow keys, but only while the gallery has focus, so they do
+        // not hijack the page for someone scrolling normally.
+        $gallery.attr('tabindex', 0).on('keydown', function (e) {
+            if (e.key === 'ArrowRight') { e.preventDefault(); show(index + 1); }
+            if (e.key === 'ArrowLeft')  { e.preventDefault(); show(index - 1); }
+        });
+    }
+
+    /* ---------- YouTube facade ---------- */
+    // The iframe is created only when the visitor presses play, so a
+    // page with a product video makes no request to YouTube, loads no
+    // third-party script and sets no cookie unless it is watched.
+
+    $(document).on('click', '.js-play-video', function () {
+        var $facade  = $(this).closest('.video-facade');
+        var videoId  = $facade.data('video-id');
+
+        if (!videoId) { return; }
+
+        // youtube-nocookie.com is the privacy-enhanced host.
+        var src = 'https://www.youtube-nocookie.com/embed/'
+                + encodeURIComponent(videoId)
+                + '?autoplay=1&rel=0&modestbranding=1&playsinline=1';
+
+        var $frame = $('<iframe>')
+            .attr({
+                src: src,
+                title: 'Product video',
+                allow: 'accelerometer; autoplay; encrypted-media; picture-in-picture',
+                referrerpolicy: 'strict-origin-when-cross-origin',
+                allowfullscreen: 'allowfullscreen',
+                frameborder: '0'
+            })
+            .addClass('video-frame');
+
+        $facade.replaceWith($frame);
+    });
+
+    // YouTube thumbnails are remote, so fall back to the product photo
+    // if the network is unavailable rather than showing a broken image.
+    $('img[data-fallback]').on('error', function () {
+        var fallback = $(this).data('fallback');
+
+        if (fallback && this.src !== fallback) {
+            this.src = fallback;
+        }
+    });
+
+    // Leaving a slide should stop whatever is playing on it, otherwise
+    // audio keeps going from a photo the visitor has scrolled past.
+    $(document).on('gallery:change', function () {
+        $('.video-frame').each(function () {
+            var $frame = $(this);
+            var src    = $frame.attr('src');
+
+            if (src && src.indexOf('autoplay=1') !== -1) {
+                $frame.attr('src', src.replace('autoplay=1', 'autoplay=0'));
+            }
+        });
+    });
+
+    /* ---------- CAPTCHA refresh ---------- */
+    // Requesting the endpoint again generates a brand new challenge on
+    // the server, so the old answer stops working the moment this runs.
+
+    $(document).on('click', '.js-captcha-refresh', function () {
+        var $img = $(this).closest('.captcha-image-wrap').find('.js-captcha-image');
+
+        $img.attr('src', '/api/captcha_image.php?form=' + encodeURIComponent($img.data('form'))
+                       + '&t=' + Date.now());
+
+        $(this).closest('.captcha-group').find('.captcha-input').val('').trigger('focus');
+    });
+
+    // Clicking the image itself is the habit most people have.
+    $(document).on('click', '.js-captcha-image', function () {
+        $(this).closest('.captcha-image-wrap').find('.js-captcha-refresh').trigger('click');
     });
 
     /* ---------- Printable receipt ---------- */

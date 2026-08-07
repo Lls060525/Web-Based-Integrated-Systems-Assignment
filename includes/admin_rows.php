@@ -177,6 +177,22 @@ if (!function_exists('admin_empty_row')) {
                 <td>
                     <a href="/admin/product_form.php?id=<?= (int)$p['id'] ?>" class="btn-outline btn-sm">Edit</a>
 
+                    <?php if (photo_gallery_ready()): ?>
+                        <a href="/admin/product_photos.php?id=<?= (int)$p['id'] ?>" class="btn-outline btn-sm">
+                            <i class="fas fa-images"></i>
+                            <?= product_photo_count((int)$p['id']) ?>
+                        </a>
+                    <?php endif; ?>
+
+                    <?php if (spec_module_ready()): ?>
+                        <?php $specCount = count(product_specs((int)$p['id'])); ?>
+                        <a href="/admin/product_specs.php?id=<?= (int)$p['id'] ?>"
+                           class="btn-outline btn-sm <?= $specCount === 0 ? 'is-empty' : '' ?>"
+                           title="<?= $specCount === 0 ? 'No specifications recorded' : $specCount . ' specification(s)' ?>">
+                            <i class="fas fa-list-check"></i> <?= $specCount ?>
+                        </a>
+                    <?php endif; ?>
+
                     <form action="/admin/products.php" method="POST" class="inline-form"
                           <?= $isActive ? 'data-confirm="Deactivate this product? Members will no longer see it."' : '' ?>>
                         <?php csrf_field(); ?>
@@ -314,4 +330,62 @@ if (!function_exists('admin_empty_row')) {
             </tr>
         <?php endforeach;
     }
+
+/**
+ * Stock listing rows.
+ *
+ * Extracted so admin/stock.php can answer an AJAX search with the rows
+ * ALONE. Without this the page returned its whole self, layout included,
+ * and the live search injected the entire admin panel into the table
+ * body -- the panel appeared nested inside itself.
+ *
+ * @param string $q        current search term, preserved on the Manage link
+ * @param string $filter   current state filter, preserved likewise
+ * @param int|null $selectedId  the product whose panel is open
+ */
+function admin_stock_rows(array $products, string $q = '', string $filter = '',
+                          ?int $selectedId = null): void
+{
+    if (count($products) === 0) {
+        echo '<tr><td colspan="6" class="table-empty">No products match.</td></tr>';
+        return;
+    }
+
+    foreach ($products as $p) {
+        $state = stock_state($p);
+        $badge = match ($state) {
+            'out'   => 'badge-danger',
+            'low'   => 'badge-warning',
+            default => 'badge-success',
+        };
+
+        $isSelected = $selectedId !== null && $selectedId === (int)$p['id'];
+
+        $link = '/admin/stock.php?product=' . (int)$p['id']
+              . ($q !== '' ? '&amp;q=' . urlencode($q) : '')
+              . ($filter !== '' ? '&amp;filter=' . urlencode($filter) : '');
+        ?>
+        <tr class="<?= $isSelected ? 'row-selected' : '' ?>">
+            <td class="cell-thumb">
+                <img src="<?= e(product_image($p['image'])) ?>" alt="" class="table-thumb">
+            </td>
+            <td>
+                <strong><?= e($p['name']) ?></strong><br>
+                <small class="muted"><?= e($p['category_name'] ?: 'Uncategorised') ?></small>
+            </td>
+            <td><strong class="stock-number"><?= (int)$p['stock'] ?></strong></td>
+            <td class="muted"><?= reorder_level($p) ?></td>
+            <td>
+                <span class="badge <?= $badge ?>">
+                    <?= $state === 'out' ? 'Out' : ($state === 'low' ? 'Low' : 'OK') ?>
+                </span>
+            </td>
+            <td>
+                <a href="<?= $link ?>" class="btn-outline btn-sm">Manage</a>
+            </td>
+        </tr>
+        <?php
+    }
+}
+
 }

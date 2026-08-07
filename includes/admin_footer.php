@@ -8,6 +8,13 @@
 // ============================================================
 ?>
         </main>
+
+<?php
+// The webcam dialog is shared by every dropzone on the page.
+// render_webcam_modal() prints itself once and then no-ops.
+require_once __DIR__ . '/webcam.php';
+render_webcam_modal();
+?>
     </div><!-- /.admin-main-content -->
 </div><!-- /.admin-wrapper -->
 

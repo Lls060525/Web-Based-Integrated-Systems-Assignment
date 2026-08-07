@@ -22,6 +22,17 @@ $ink    = '#222222';
 $muted  = '#6b7280';
 $rule   = '#dddddd';
 $accent = '#ee4d2d';
+
+// A data: URI, not a URL to /api/qr_image.php.
+//
+// Dompdf runs with isRemoteEnabled = false, so it will not fetch an
+// image over HTTP -- and it should not be allowed to, because that
+// setting is what stops a crafted receipt from making the server
+// request arbitrary URLs. The image therefore has to travel inside the
+// document. The same markup then works in an email client, which also
+// blocks remote images by default.
+$qrImage     = qr_data_uri(order_verify_url((int)$order['id']), 300);
+$qrShortCode = order_short_code((int)$order['id']);
 ?>
 <div style="font-family: DejaVu Sans, Arial, Helvetica, sans-serif; color: <?= $ink ?>; font-size: 12px; line-height: 1.5; max-width: 700px; margin: 0 auto;">
 
@@ -85,7 +96,12 @@ $accent = '#ee4d2d';
         <?php foreach ($lines as $line): ?>
             <?php $amount = $line['price_at_purchase'] * $line['quantity']; ?>
             <tr>
-                <td style="padding: 9px 6px; border-bottom: 1px solid <?= $rule ?>;"><?= e($line['product_name']) ?></td>
+                <td style="padding: 9px 6px; border-bottom: 1px solid <?= $rule ?>;">
+                    <?= e($line['product_name']) ?>
+                    <?php if (!empty($line['options_text'])): ?>
+                        <div style="color: <?= $muted ?>; font-size: 10px;"><?= e($line['options_text']) ?></div>
+                    <?php endif; ?>
+                </td>
                 <td style="padding: 9px 6px; border-bottom: 1px solid <?= $rule ?>; text-align: right;"><?= e(money($line['price_at_purchase'])) ?></td>
                 <td style="padding: 9px 6px; border-bottom: 1px solid <?= $rule ?>; text-align: center;"><?= (int)$line['quantity'] ?></td>
                 <td style="padding: 9px 6px; border-bottom: 1px solid <?= $rule ?>; text-align: right;"><?= e(money($amount)) ?></td>
@@ -141,6 +157,36 @@ $accent = '#ee4d2d';
                         </td>
                     </tr>
                 </table>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Verification -->
+    <table style="width: 100%; border-collapse: collapse; margin: 22px 0 6px;">
+        <tr>
+            <?php if ($qrImage !== null): ?>
+                <td style="width: 96px; vertical-align: top; padding-right: 14px;">
+                    <img src="<?= $qrImage ?>" alt="Receipt verification code" width="90" height="90"
+                         style="display: block; border: 1px solid <?= $rule ?>;">
+                </td>
+            <?php endif; ?>
+            <td style="vertical-align: top; font-size: 10px; color: <?= $muted ?>;">
+                <p style="margin: 0 0 4px; font-weight: bold; color: <?= $ink ?>; font-size: 11px;">
+                    Verify this receipt
+                </p>
+                <?php if ($qrImage !== null): ?>
+                    <p style="margin: 0 0 4px;">
+                        Scan the code, or go to <strong><?= e(base_url()) ?>/verify.php</strong>
+                        and enter the reference below.
+                    </p>
+                <?php else: ?>
+                    <p style="margin: 0 0 4px;">
+                        Go to <strong><?= e(base_url()) ?>/verify.php</strong> and enter this reference.
+                    </p>
+                <?php endif; ?>
+                <p style="margin: 0; font-family: DejaVu Sans Mono, Courier New, monospace; font-size: 13px; letter-spacing: 1px; color: <?= $ink ?>;">
+                    <?= e($qrShortCode) ?>
+                </p>
             </td>
         </tr>
     </table>

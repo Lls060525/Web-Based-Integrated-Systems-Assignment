@@ -159,7 +159,8 @@ include __DIR__ . '/includes/header.php';
                     <a href="/order_detail.php?id=<?= (int)$order['id'] ?>" class="btn-outline">
                         Keep My Order
                     </a>
-                    <?php html_submit('Cancel This Order', ['class' => 'btn-primary btn-danger-solid']); ?>
+                    <?php html_submit('Cancel This Order', ['class' => 'btn-primary btn-danger-solid',
+                                      'data-busy' => 'Cancelling...']); ?>
                 </div>
             </form>
         </div>

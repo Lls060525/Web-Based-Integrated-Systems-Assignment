@@ -8,6 +8,7 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+require_once __DIR__ . '/../includes/dropzone.php';
 
 $id     = get_int('id');
 $isEdit = $id !== null;
@@ -215,14 +216,14 @@ include __DIR__ . '/../includes/admin_header.php';
                 </div>
             </fieldset>
 
-            <?php field('profile_photo', 'Profile Photo', function () use ($account) { ?>
-                <div class="image-preview-box">
-                    <img src="<?= e(avatar_image($account['profile_photo'])) ?>"
-                         id="adminPhotoPreview" alt="Profile preview" class="image-preview image-preview-round">
-                </div>
-                <?php html_file('profile_photo', ['accept' => 'image/*', 'id' => 'adminPhotoInput']); ?>
-                <small class="form-hint">JPG, PNG, GIF or WEBP, maximum 2 MB. Leave blank to keep the current photo.</small>
-            <?php }); ?>
+            <?php field('profile_photo', 'Profile Photo', function () use ($account) {
+                render_dropzone('profile_photo', avatar_image($account['profile_photo']), [
+                    'shape' => 'round',
+                    'hint'  => 'JPG, PNG, GIF or WEBP, maximum '
+                             . (UPLOAD_MAX_SIZE / 1024 / 1024) . ' MB. '
+                             . 'Leave empty to keep the current photo.',
+                ]);
+            }); ?>
 
             <?php if ($isEdit): ?>
                 <p class="muted small-note">

@@ -2,6 +2,8 @@
     "require": {
         "stripe/stripe-php": "^21.1",
         "dompdf/dompdf": "^3.1",
-        "phpmailer/phpmailer": "^7.1"
+        "phpmailer/phpmailer": "^7.1",
+        "gregwar/captcha": "^2.1",
+        "endroid/qr-code": "^6.0"
     }
 }

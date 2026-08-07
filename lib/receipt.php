@@ -161,10 +161,8 @@ function send_receipt_email(int $orderId): array
         return ['sent' => false, 'mode' => MAIL_MODE, 'error' => 'Order not found.', 'attached' => false, 'link' => ''];
     }
 
-    $order  = $data['order'];
-    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    $host   = $_SERVER['HTTP_HOST'] ?? 'localhost';
-    $link   = $scheme . '://' . $host . '/receipt.php?id=' . $order['id'];
+    $order = $data['order'];
+    $link  = base_url() . '/receipt.php?id=' . $order['id'];
 
     // The email body is the receipt itself, so it reads properly even
     // in a client that will not open attachments.

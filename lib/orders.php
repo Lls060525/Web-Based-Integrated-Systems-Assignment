@@ -188,11 +188,15 @@ function find_member_order(int $orderId, int $userId): ?array
 /** Every line of an order, joined to the product for name and photo. */
 function order_lines(int $orderId): array
 {
+    // options_text only exists once migration_20 has been run.
+    $optionsColumn = db_column_exists('order_items', 'options_text')
+        ? 'oi.options_text' : "NULL AS options_text";
+
     return db_all(
-        'SELECT oi.*, p.name AS product_name, p.image
+        "SELECT oi.*, $optionsColumn, p.name AS product_name, p.image
            FROM order_items oi
            JOIN products p ON p.id = oi.product_id
-          WHERE oi.order_id = ?',
+          WHERE oi.order_id = ?",
         [$orderId]
     );
 }

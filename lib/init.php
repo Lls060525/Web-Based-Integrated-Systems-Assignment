@@ -46,6 +46,7 @@ if (is_file($composerAutoload)) {
 // ---------- Base library ----------
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/ajax.php';
 require_once __DIR__ . '/validation.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/auth.php';
@@ -56,8 +57,26 @@ require_once __DIR__ . '/wishlist.php';
 require_once __DIR__ . '/voucher.php';
 require_once __DIR__ . '/points.php';
 require_once __DIR__ . '/stock.php';
+require_once __DIR__ . '/review.php';
+require_once __DIR__ . '/product_photo.php';
+require_once __DIR__ . '/video.php';
+require_once __DIR__ . '/image.php';
+require_once __DIR__ . '/captcha.php';
+require_once __DIR__ . '/remember.php';
+require_once __DIR__ . '/batch.php';
+require_once __DIR__ . '/qrcode.php';
+require_once __DIR__ . '/spec.php';
+require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/orders.php';
 require_once __DIR__ . '/receipt.php';
+
+// ---------- Remember me ----------
+// Runs after the library is loaded and only when the cookie is
+// actually present, so a guest browsing the catalogue costs no
+// extra query.
+if (isset($_COOKIE[REMEMBER_COOKIE])) {
+    remember_attempt_login();
+}
 
 // ---------- Baseline security response headers ----------
 if (!headers_sent()) {

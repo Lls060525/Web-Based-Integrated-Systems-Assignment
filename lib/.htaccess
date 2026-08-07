@@ -1,0 +1,3 @@
+# Deny direct web access to the library. These files are only ever
+# reached through require_once from a page in the web root.
+Require all denied

@@ -34,6 +34,9 @@ if (is_member()) {
     <!-- jQuery (small external library - permitted by the assignment brief) -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="/assets/js/main.js" defer></script>
+    <script src="/assets/js/ajax.js" defer></script>
+    <script src="/assets/js/dropzone.js" defer></script>
+    <script src="/assets/js/webcam.js" defer></script>
 </head>
 <body>
 <header class="topbar">

@@ -10,6 +10,7 @@
 // ============================================================
 
 require_once __DIR__ . '/../lib/init.php';
+require_once __DIR__ . '/../includes/captcha_field.php';
 
 require_guest();
 
@@ -28,6 +29,25 @@ if (is_post()) {
         v_email('email', $email);
     }
 
+    // Without this, the reset form is a way to have the site send mail
+    // to any address repeatedly.
+    captcha_verify('forgot');
+
+    if (no_err() && !form_nonce_valid('forgot')) {
+        add_err('email', 'That request was already sent. The form has been reset; '
+                       . 'press Send again if you need another link.');
+    }
+
+    // Without a floor here the form is a way to have the site mail any
+    // address repeatedly. The CAPTCHA raises the cost per attempt; this
+    // caps the rate regardless.
+    $wait = action_cooldown('password_reset', MAIL_TEST_COOLDOWN);
+
+    if (no_err() && $wait > 0) {
+        add_err('email', 'A reset link was just requested. Please wait ' . $wait
+                       . ' more second' . ($wait === 1 ? '' : 's') . ' before trying again.');
+    }
+
     if (no_err() && !reset_module_ready()) {
         add_err('email', 'Password reset is not available yet: run database/migration_password_reset.sql.');
     }
@@ -38,6 +58,8 @@ if (is_post()) {
         // Always report success. Telling an attacker "no such account"
         // would turn this page into an account-enumeration tool.
         $sent = true;
+        action_touch('password_reset');
+        captcha_clear('forgot');
 
         if ($user) {
             $token  = create_reset_token((int)$user['id']);
@@ -93,13 +115,19 @@ include __DIR__ . '/../includes/header.php';
 
             <form action="/auth/forgot_password.php" method="POST" class="form-standard">
                 <?php csrf_field(); ?>
+                <?php form_nonce('forgot'); ?>
 
                 <?php field('email', 'Email Address', function () {
                     html_email('email', '', ['required' => true, 'autofocus' => true, 'maxlength' => 100]);
                 }, true); ?>
 
+                <?php render_captcha_field('forgot'); ?>
+
                 <div class="form-actions">
-                    <?php html_submit('Send Reset Link', ['class' => 'btn-primary btn-block']); ?>
+                    <?php html_submit('Send Reset Link', [
+                        'class'     => 'btn-primary btn-block',
+                        'data-busy' => 'Sending...',
+                    ]); ?>
                 </div>
             </form>
 

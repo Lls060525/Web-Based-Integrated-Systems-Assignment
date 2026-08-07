@@ -61,20 +61,35 @@ if (is_post()) {
 }
 
 // ---------- Load the cart ----------
+$hasOptions = db_column_exists('cart', 'options_signature');
+$sigColumn  = $hasOptions ? 'c.options_signature' : "'' AS options_signature";
+
 $items = db_all(
-    'SELECT c.id AS cart_id, c.quantity,
+    "SELECT c.id AS cart_id, c.quantity, $sigColumn,
             p.id AS product_id, p.name, p.price, p.image, p.stock
        FROM cart c
        JOIN products p ON p.id = c.product_id
       WHERE c.user_id = ?
-      ORDER BY c.added_at DESC',
+      ORDER BY c.added_at DESC",
     [$userId]
 );
 
 $totalPrice = 0;
 $totalItems = 0;
-foreach ($items as $item) {
-    $totalPrice += $item['price'] * $item['quantity'];
+
+foreach ($items as $index => $item) {
+    // The label and the price adjustment are recomputed from the
+    // current options rather than cached on the line, so an admin
+    // changing a price delta shows up before checkout, not after.
+    $chosen = spec_describe_signature((int)$item['product_id'], (string)$item['options_signature']);
+
+    $unitPrice = (float)$item['price'] + $chosen['delta'];
+
+    $items[$index]['options_label'] = $chosen['label'];
+    $items[$index]['options_valid'] = $chosen['valid'];
+    $items[$index]['unit_price']    = $unitPrice;
+
+    $totalPrice += $unitPrice * $item['quantity'];
     $totalItems += $item['quantity'];
 }
 
@@ -115,18 +130,37 @@ include __DIR__ . '/includes/header.php';
                         </thead>
                         <tbody>
                         <?php foreach ($items as $item): ?>
-                            <?php $subtotal = $item['price'] * $item['quantity']; ?>
+                            <?php $subtotal = $item['unit_price'] * $item['quantity']; ?>
                             <tr>
                                 <td class="cell-thumb">
                                     <img src="<?= e(product_image($item['image'])) ?>" alt="<?= e($item['name']) ?>" class="cart-thumb">
                                 </td>
                                 <td>
                                     <strong><?= e($item['name']) ?></strong>
+
+                                    <?php if ($item['options_label'] !== ''): ?>
+                                        <div class="cart-options"><?= e($item['options_label']) ?></div>
+                                    <?php endif; ?>
+
+                                    <?php if (!$item['options_valid']): ?>
+                                        <div class="err small-note">
+                                            One of the options you chose is no longer offered.
+                                            Please remove this line and add it again.
+                                        </div>
+                                    <?php endif; ?>
+
                                     <?php if ($item['quantity'] > $item['stock']): ?>
                                         <br><span class="err">Only <?= (int)$item['stock'] ?> left in stock.</span>
                                     <?php endif; ?>
                                 </td>
-                                <td><?= e(money($item['price'])) ?></td>
+                                <td>
+                                    <?= e(money($item['unit_price'])) ?>
+                                    <?php if (abs($item['unit_price'] - $item['price']) >= 0.005): ?>
+                                        <div class="muted small-note">
+                                            base <?= e(money($item['price'])) ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <input type="number"
                                            name="quantities[<?= (int)$item['cart_id'] ?>]"

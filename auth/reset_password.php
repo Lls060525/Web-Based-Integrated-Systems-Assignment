@@ -38,6 +38,10 @@ if (is_post() && $reset) {
             );
             consume_reset_token((int)$reset['id']);
             db()->commit();
+
+            // Someone resetting a password may be recovering a hijacked
+            // account, so every remembered device is revoked.
+            remember_forget_all((int)$reset['user_id']);
         } catch (\Throwable $e) {
             db()->rollBack();
             error_log('Password reset failed: ' . $e->getMessage());

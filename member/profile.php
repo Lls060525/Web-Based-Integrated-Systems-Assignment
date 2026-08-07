@@ -5,6 +5,7 @@
 // ============================================================
 
 require_once __DIR__ . '/../lib/init.php';
+require_once __DIR__ . '/../includes/dropzone.php';
 
 require_login();
 
@@ -62,6 +63,17 @@ if (is_post()) {
                 // A password change should invalidate any pending reset link.
                 revoke_reset_tokens($userId);
 
+                // Every remembered device is dropped too. The old password
+                // may be exactly how an attacker planted one of them.
+                remember_forget_all((int)$userId);
+
+                // The current browser session survives, so they are not
+                // thrown out mid-task, but its id is rotated so any session
+                // fixated earlier is now worthless.
+                if ($userId === current_user_id()) {
+                    session_regenerate_id(true);
+                }
+
                 flash_success('Password changed successfully.');
                 redirect('/member/profile.php');
             }
@@ -101,16 +113,16 @@ include __DIR__ . '/../includes/header.php';
 
         <aside class="profile-sidebar">
             <div class="profile-avatar-section">
-                <img src="<?= e($avatar) ?>" alt="Profile photo" id="avatarPreview" class="avatar-img">
-
                 <form action="/member/profile.php" method="POST" enctype="multipart/form-data" class="upload-form">
                     <?php csrf_field(); ?>
                     <?php html_hidden('action', 'upload_photo'); ?>
 
-                    <label class="btn-outline" for="photoInput">Select Image</label>
-                    <input type="file" id="photoInput" name="profile_photo" accept="image/*" class="visually-hidden">
-                    <?php html_submit('Upload', ['class' => 'btn-primary btn-sm mt-2', 'id' => 'uploadBtn', 'style' => 'display:none;']); ?>
-                    <?php err('profile_photo'); ?>
+                    <?php render_dropzone('profile_photo', $avatar, [
+                        'shape' => 'round',
+                        'hint'  => 'Drag a photo here or click to browse.',
+                    ]); ?>
+
+                    <?php html_submit('Upload Photo', ['class' => 'btn-primary btn-block mt-2']); ?>
                 </form>
             </div>
 
@@ -120,6 +132,8 @@ include __DIR__ . '/../includes/header.php';
                 <a href="/member/addresses.php">My Addresses</a>
                 <a href="/member/wishlist.php">My Wishlist</a>
                 <a href="/member/points.php">Reward Points</a>
+                <a href="/member/reviews.php">My Reviews</a>
+                <a href="/member/devices.php">Signed-in Devices</a>
                 <a href="/orders.php">My Orders</a>
             </nav>
         </aside>

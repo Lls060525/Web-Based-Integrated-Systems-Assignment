@@ -35,7 +35,12 @@ if (!function_exists('render_order_lines')) {
                     <td class="cell-thumb">
                         <img src="<?= e(product_image($line['image'])) ?>" alt="" class="table-thumb">
                     </td>
-                    <td><strong><?= e($line['product_name']) ?></strong></td>
+                    <td>
+                        <strong><?= e($line['product_name']) ?></strong>
+                        <?php if (!empty($line['options_text'])): ?>
+                            <div class="cart-options"><?= e($line['options_text']) ?></div>
+                        <?php endif; ?>
+                    </td>
                     <td><?= e(money($line['price_at_purchase'])) ?></td>
                     <td>&times; <?= (int)$line['quantity'] ?></td>
                     <td><strong><?= e(money($subtotal)) ?></strong></td>

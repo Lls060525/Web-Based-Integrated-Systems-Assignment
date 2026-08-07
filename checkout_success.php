@@ -60,12 +60,15 @@ try {
     db()->beginTransaction();
 
     // FOR UPDATE locks the rows so two tabs cannot both spend the same stock.
+    $sigColumn = db_column_exists('cart', 'options_signature')
+        ? 'c.options_signature' : "'' AS options_signature";
+
     $items = db_all(
-        'SELECT c.product_id, c.quantity, p.price, p.stock
+        "SELECT c.product_id, c.quantity, $sigColumn, p.price, p.stock
            FROM cart c
            JOIN products p ON p.id = c.product_id
           WHERE c.user_id = ?
-          FOR UPDATE',
+          FOR UPDATE",
         [$userId]
     );
 
@@ -76,8 +79,16 @@ try {
     }
 
     $subtotal = 0.0;
-    foreach ($items as $item) {
-        $subtotal += $item['price'] * $item['quantity'];
+    foreach ($items as $index => $item) {
+        // Priced once, here, and then written into order_items. From this
+        // point the chosen options are a snapshot: renaming or deleting an
+        // option later must not rewrite what the customer actually bought.
+        $chosen = spec_describe_signature((int)$item['product_id'], (string)$item['options_signature']);
+
+        $items[$index]['unit_price']   = (float)$item['price'] + $chosen['delta'];
+        $items[$index]['options_text'] = $chosen['label'];
+
+        $subtotal += $items[$index]['unit_price'] * $item['quantity'];
     }
 
     // ---------- Voucher ----------
@@ -155,12 +166,26 @@ try {
 
     $orderId = db_last_id();
 
+    $snapshotOptions = db_column_exists('order_items', 'options_text');
+
     foreach ($items as $item) {
-        db_exec(
-            'INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase)
-             VALUES (?, ?, ?, ?)',
-            [$orderId, $item['product_id'], $item['quantity'], $item['price']]
-        );
+        // price_at_purchase carries the option deltas, exactly as the
+        // customer was charged, and options_text records which options
+        // those were. Both are snapshots for the same reason.
+        if ($snapshotOptions) {
+            db_exec(
+                'INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase, options_text)
+                 VALUES (?, ?, ?, ?, ?)',
+                [$orderId, $item['product_id'], $item['quantity'],
+                 $item['unit_price'], $item['options_text'] !== '' ? $item['options_text'] : null]
+            );
+        } else {
+            db_exec(
+                'INSERT INTO order_items (order_id, product_id, quantity, price_at_purchase)
+                 VALUES (?, ?, ?, ?)',
+                [$orderId, $item['product_id'], $item['quantity'], $item['unit_price']]
+            );
+        }
 
         // deduct_stock() does the conditional UPDATE and writes the
         // movement ledger entry. It throws if another order took the

@@ -6,6 +6,7 @@
 
 require_once __DIR__ . '/lib/init.php';
 require_once __DIR__ . '/includes/product_card.php';
+require_once __DIR__ . '/includes/review_parts.php';
 
 $title = 'Products - ' . APP_NAME;
 
@@ -25,6 +26,13 @@ $sortOptions = [
     'name_asc'   => 'Name: A to Z',
 ];
 
+// Rating sort and filter only appear once the module is installed.
+if (review_module_ready()) {
+    $sortOptions['rating'] = 'Highest Rated';
+}
+
+$minRating = get_int('min_rating');
+
 if (!array_key_exists($sort, $sortOptions)) {
     $sort = 'newest';
 }
@@ -33,8 +41,23 @@ $orderBy = match ($sort) {
     'price_asc'  => 'p.price ASC',
     'price_desc' => 'p.price DESC',
     'name_asc'   => 'p.name ASC',
+    // Products with no reviews sort last rather than counting as zero.
+    'rating'     => 'COALESCE(rv.avg_rating, 0) DESC, rv.review_count DESC, p.id DESC',
     default      => 'p.id DESC',
 };
+
+// One derived table gives every product its aggregate without an
+// N+1 query and without a cached column that could drift.
+$ratingJoin = review_module_ready()
+    ? "LEFT JOIN (
+            SELECT product_id,
+                   AVG(rating) AS avg_rating,
+                   COUNT(*)    AS review_count
+              FROM reviews
+             WHERE status = 'published'
+             GROUP BY product_id
+       ) rv ON rv.product_id = p.id"
+    : '';
 
 // ---------- Build the query (always parameterised) ----------
 $where  = ["p.status = 'active'"];
@@ -61,9 +84,21 @@ if (is_numeric($maxPrice)) {
     $params[] = (float)$maxPrice;
 }
 
-$whereSql = 'WHERE ' . implode(' AND ', $where);
+if (review_module_ready() && $minRating !== null && $minRating >= 1 && $minRating <= 5) {
+    $where[]  = 'rv.avg_rating >= ?';
+    $params[] = $minRating;
+}
 
-$total      = (int)db_value("SELECT COUNT(*) FROM products p $whereSql", $params);
+// ---------- Specification filters ----------
+// Built from whatever spec_* keys are in the query string. Each becomes
+// its own EXISTS subquery, so two filters on two different attributes
+// do not multiply rows the way two JOINs onto product_specs would.
+$specFilter = spec_filter_sql($_GET);
+$params     = array_merge($params, $specFilter['params']);
+
+$whereSql = 'WHERE ' . implode(' AND ', $where) . $specFilter['sql'];
+
+$total      = (int)db_value("SELECT COUNT(*) FROM products p $ratingJoin $whereSql", $params);
 $totalPages = max(1, (int)ceil($total / $perPage));
 $page       = min($page, $totalPages);
 $offset     = ($page - 1) * $perPage;
@@ -72,6 +107,7 @@ $products = db_all(
     "SELECT p.*, c.name AS category_name
        FROM products p
        LEFT JOIN categories c ON c.id = p.category_id
+       $ratingJoin
        $whereSql
       ORDER BY $orderBy
       LIMIT $perPage OFFSET $offset",
@@ -118,6 +154,89 @@ include __DIR__ . '/includes/header.php';
                 </ul>
             </div>
 
+            <?php if (review_module_ready()): ?>
+                <div class="filter-block">
+                    <h4>Customer Rating</h4>
+                    <ul class="filter-list">
+                        <li>
+                            <a href="<?= e(catalogue_url(['min_rating' => null, 'page' => null])) ?>"
+                               class="<?= $minRating === null ? 'active' : '' ?>">Any rating</a>
+                        </li>
+                        <?php for ($stars = 4; $stars >= 1; $stars--): ?>
+                            <li>
+                                <a href="<?= e(catalogue_url(['min_rating' => $stars, 'page' => null])) ?>"
+                                   class="rating-filter <?= $minRating === $stars ? 'active' : '' ?>">
+                                    <?php render_stars((float)$stars, 'stars-sm'); ?>
+                                    <span>&amp; up</span>
+                                </a>
+                            </li>
+                        <?php endfor; ?>
+                    </ul>
+                </div>
+            <?php endif; ?>
+
+            <?php
+                /* Spec filters are only offered inside a category.
+                 *
+                 * Attributes belong to categories, so across the whole
+                 * catalogue a "RAM" filter would sit above a list that is
+                 * mostly cables and cases. Narrowing first is also how
+                 * people actually shop.
+                 */
+                $specFilters = $categoryId !== null ? spec_filter_options($categoryId) : [];
+            ?>
+
+            <?php foreach ($specFilters as $attribute): ?>
+                <div class="filter-block">
+                    <h4>
+                        <?= e($attribute['name']) ?>
+                        <?php if (!empty($attribute['unit'])): ?>
+                            <span class="muted">(<?= e($attribute['unit']) ?>)</span>
+                        <?php endif; ?>
+                    </h4>
+
+                    <?php if ($attribute['data_type'] === 'number'): ?>
+                        <?php
+                            $minKey = 'spec_' . $attribute['id'] . '_min';
+                            $maxKey = 'spec_' . $attribute['id'] . '_max';
+                        ?>
+                        <div class="price-range">
+                            <input type="number" name="<?= e($minKey) ?>" step="any"
+                                   min="<?= e($attribute['range']['min']) ?>"
+                                   max="<?= e($attribute['range']['max']) ?>"
+                                   value="<?= e(get($minKey)) ?>"
+                                   placeholder="<?= e(rtrim(rtrim(number_format($attribute['range']['min'], 2, '.', ''), '0'), '.')) ?>"
+                                   class="form-control">
+                            <span>&ndash;</span>
+                            <input type="number" name="<?= e($maxKey) ?>" step="any"
+                                   min="<?= e($attribute['range']['min']) ?>"
+                                   max="<?= e($attribute['range']['max']) ?>"
+                                   value="<?= e(get($maxKey)) ?>"
+                                   placeholder="<?= e(rtrim(rtrim(number_format($attribute['range']['max'], 2, '.', ''), '0'), '.')) ?>"
+                                   class="form-control">
+                        </div>
+
+                    <?php else: ?>
+                        <?php $key = 'spec_' . $attribute['id'] . '_eq'; ?>
+                        <ul class="filter-list">
+                            <li>
+                                <a href="<?= e(catalogue_url([$key => null, 'page' => null])) ?>"
+                                   class="<?= get($key) === '' ? 'active' : '' ?>">Any</a>
+                            </li>
+                            <?php foreach ($attribute['values'] as $value): ?>
+                                <li>
+                                    <a href="<?= e(catalogue_url([$key => $value['value_text'], 'page' => null])) ?>"
+                                       class="<?= get($key) === $value['value_text'] ? 'active' : '' ?>">
+                                        <?= e($value['value_text']) ?>
+                                        <span class="filter-count"><?= (int)$value['product_count'] ?></span>
+                                    </a>
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+
             <div class="filter-block">
                 <h4>Price Range (RM)</h4>
                 <div class="price-range">
@@ -129,10 +248,18 @@ include __DIR__ . '/includes/header.php';
                 </div>
                 <?php if ($categoryId !== null) { html_hidden('category', $categoryId); } ?>
                 <?php html_hidden('sort', $sort); ?>
+
+                <?php /* Enum spec filters are links, so their value has to
+                          survive the price form being submitted too. */ ?>
+                <?php foreach ($specFilter['active'] as $specKey => $specValue): ?>
+                    <?php if (str_ends_with($specKey, '_eq')) { html_hidden($specKey, $specValue); } ?>
+                <?php endforeach; ?>
+
                 <?php html_submit('Apply', ['class' => 'btn-outline btn-block']); ?>
             </div>
 
-            <?php if ($q !== '' || $categoryId !== null || $minPrice !== '' || $maxPrice !== ''): ?>
+            <?php if ($q !== '' || $categoryId !== null || $minPrice !== '' || $maxPrice !== ''
+                      || $minRating !== null || $specFilter['active'] !== []): ?>
                 <a href="/products.php" class="btn-outline btn-block">Clear All Filters</a>
             <?php endif; ?>
         </form>
@@ -145,15 +272,46 @@ include __DIR__ . '/includes/header.php';
             <?php if ($categoryId !== null) { html_hidden('category', $categoryId); } ?>
             <?php html_hidden('min_price', $minPrice); ?>
             <?php html_hidden('max_price', $maxPrice); ?>
+            <?php if ($minRating !== null) { html_hidden('min_rating', $minRating); } ?>
+
+            <?php foreach ($specFilter['active'] as $specKey => $specValue): ?>
+                <?php html_hidden($specKey, $specValue); ?>
+            <?php endforeach; ?>
 
             <label for="sort">Sort by</label>
             <?php html_select('sort', $sortOptions, $sort, ['class' => 'form-control js-auto-submit']); ?>
             <noscript><?php html_submit('Go', ['class' => 'btn-outline btn-sm']); ?></noscript>
         </form>
 
-        <?php render_product_grid($products, 'No products match your filters.'); ?>
+        <?php render_product_grid($products, 'No products match your filters.', 'productGrid'); ?>
 
         <?php if ($totalPages > 1): ?>
+            <?php
+                /* The numbered links stay. Load More is added ON TOP of
+                 * them, not instead: with JavaScript off, or if the
+                 * endpoint fails, paging still works exactly as before.
+                 * The button removes itself from the flow only once it
+                 * has successfully fetched something.
+                 */
+                $loadQuery = $_GET;
+                unset($loadQuery['page']);
+            ?>
+
+            <?php if ($page < $totalPages): ?>
+                <div class="load-more-wrap">
+                    <p class="muted small-note">
+                        Showing <span id="resultCount"><?= count($products) ?> of <?= $total ?></span>
+                    </p>
+
+                    <?php html_button('Load More', [
+                        'id'         => 'loadMore',
+                        'class'      => 'btn-outline',
+                        'data-next'  => $page + 1,
+                        'data-query' => http_build_query($loadQuery),
+                    ]); ?>
+                </div>
+            <?php endif; ?>
+
             <nav class="pagination">
                 <?php if ($page > 1): ?>
                     <a href="<?= e(catalogue_url(['page' => $page - 1])) ?>" class="page-link">&larr; Previous</a>

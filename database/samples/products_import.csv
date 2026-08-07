@@ -1,0 +1,9 @@
+﻿category,name,price,stock,description,status
+Smartphones,"Galaxy S24 Ultra, 512GB",5499.00,12,Flagship handset with titanium frame.,active
+Smartphones,iPhone 15 Pro Max,6299.00,8,"Titanium body, A17 Pro chip.",active
+Accessories,AirBuds Pro 2,899.90,40,"Noise cancelling earbuds.
+Includes charging case.",active
+Accessories,Type-C Cable 1m,29.90,250,Braided 60W cable.,active
+Accessories,65W GaN Charger,129.00,5,Compact dual-port charger.,active
+Tablets,Galaxy Tab S9,3299.00,0,11-inch AMOLED tablet.,inactive
+Wearables,Galaxy Watch 6,1199.00,18,Health tracking smartwatch.,active

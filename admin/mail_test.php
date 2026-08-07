@@ -22,7 +22,26 @@ if (is_post()) {
         v_email('to', $to);
     }
 
+    // A one-use nonce. The CSRF token stays valid all session, so it does
+    // nothing against a second click, a refresh of the POST, or a browser
+    // back-then-resubmit. This is what makes one click send one message.
+    if (no_err() && !form_nonce_valid('mail_test')) {
+        add_err('to', 'That test was already sent. The form has been reset, so press '
+                    . 'Send again if you really want another message.');
+    }
+
+    // The nonce cannot stop somebody reloading the page for a fresh one,
+    // and this endpoint sends real mail to any address that is typed in.
+    // A floor between attempts is the actual protection.
+    $wait = action_cooldown('mail_test', MAIL_TEST_COOLDOWN);
+
+    if (no_err() && $wait > 0) {
+        add_err('to', 'Please wait ' . $wait . ' more second' . ($wait === 1 ? '' : 's')
+                    . ' before sending another test message.');
+    }
+
     if (no_err()) {
+        action_touch('mail_test');
         $body = '<p>This is a test message from ' . e(APP_NAME) . '.</p>'
               . '<p>If you are reading this in an inbox, SMTP is configured correctly.</p>'
               . '<p>Sent at ' . e(date('Y-m-d H:i:s')) . '.</p>';
@@ -63,6 +82,34 @@ $checks = [
         'label' => 'PHPMailer installed (SMTP sending)',
         'ok'    => class_exists(\PHPMailer\PHPMailer\PHPMailer::class),
         'hint'  => 'Run: composer require phpmailer/phpmailer',
+    ],
+    [
+        'label' => 'PHP GD extension enabled (image processing)',
+        'ok'    => image_processing_ready(),
+        'hint'  => 'Uncomment ";extension=gd" in php.ini, then restart Apache.',
+    ],
+    [
+        'label' => 'CAPTCHA driver working (' . CAPTCHA_DRIVER . ')',
+        'ok'    => !captcha_enabled() || captcha_ready(),
+        'hint'  => captcha_status(),
+        'warn'  => !captcha_enabled(),
+    ],
+    [
+        'label' => 'QR code library installed (' . qr_status()['driver'] . ')',
+        'ok'    => qr_module_ready(),
+        'hint'  => 'Run: composer require endroid/qr-code',
+    ],
+    [
+        'label' => 'QR_SECRET has been changed from the default',
+        'ok'    => qr_status()['secret_ok'],
+        'hint'  => 'Still the shipped placeholder. Anyone reading lib/config.php could '
+                 . 'mint a valid receipt code. Replace it with a long random string.',
+    ],
+    [
+        'label' => 'Google Maps driver (' . map_driver() . ')',
+        'ok'    => map_driver() !== 'off',
+        'hint'  => map_status()['note'],
+        'warn'  => map_driver() === 'embed',
     ],
     [
         'label' => 'PHP openssl extension enabled',
@@ -175,13 +222,14 @@ include __DIR__ . '/../includes/admin_header.php';
         </p>
 
         <form action="/admin/mail_test.php" method="POST" class="form-standard">
+            <?php form_nonce('mail_test'); ?>
             <?php csrf_field(); ?>
 
             <?php field('to', 'Send to', function () {
                 html_email('to', current_user()['email'] ?? '', ['required' => true]);
             }, true); ?>
 
-            <?php html_submit('Send Test Message'); ?>
+            <?php html_submit('Send Test Message', ['data-busy' => 'Sending...']); ?>
         </form>
     </div>
 </div>

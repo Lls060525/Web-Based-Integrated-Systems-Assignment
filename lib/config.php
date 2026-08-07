@@ -55,7 +55,7 @@ define('SMTP_SECURE', 'tls');
 define('MAIL_FROM', MAIL_MODE === 'prod' ? SMTP_USER : 'no-reply@mobile2u.local');
 
 // ---------- Stripe (Payment - additional module) ----------
-define('STRIPE_SECRET_KEY', 'secret_key_goes_here');
+define('STRIPE_SECRET_KEY', 'sk_test_51U0dmiF6tk7dJ6h2hGvDwFmxMHPIfrXuToVsgO3Dl1cLcVMdy47jhm4jdJioEbgKyh7fW7N6ubZM9BEkcx4roDXv00A5WCuPx5');
 define('STRIPE_CURRENCY',   'myr');
 
 // ---------- Order statuses (single source of truth) ----------
@@ -110,6 +110,101 @@ define('ORDER_STATUS_TRANSITIONS', [
 // Statuses that no longer allow any change at all.
 define('ORDER_FINAL_STATUSES', ['delivered']);
 
+// ---------- Google Maps ----------
+// 'embed' needs no API key and works out of the box: Google's classic
+// embed URL in an iframe. 'js' uses the full JavaScript Maps API, which
+// shows every store on one map, but needs a key AND a billing account.
+// 'off' hides maps entirely.
+define('MAP_DRIVER', 'embed');
+
+// Paste a key here and set MAP_DRIVER to 'js' to get the multi-marker map.
+// Restrict the key to your domain in the Google Cloud console: a key in
+// client-side JavaScript is public, and an unrestricted one can be lifted
+// off the page and billed to you.
+define('GOOGLE_MAPS_API_KEY', '');
+
+// Where the map starts when the visitor's location is unknown.
+// Roughly the middle of Peninsular Malaysia.
+define('MAP_DEFAULT_LAT', 3.1390);
+define('MAP_DEFAULT_LNG', 101.6869);
+define('MAP_DEFAULT_ZOOM', 11);
+
+// ---------- Double submit protection ----------
+// Minimum gap between two SMTP test messages, in seconds. This endpoint
+// will mail any address that is typed into it, so it needs a floor that
+// a page refresh cannot get around.
+define('MAIL_TEST_COOLDOWN', 30);
+
+// Same idea for a member re-sending their own receipt.
+define('RECEIPT_RESEND_COOLDOWN', 60);
+
+// ---------- QR codes ----------
+// Signing key for QR payloads. Anything encoded into a QR code is
+// public by the time it is printed, so the code carries a signature
+// rather than a bare record id -- otherwise /verify.php?order=5 would
+// let anyone page through every order in the system.
+//
+// CHANGE THIS. A default value means anyone reading this source can
+// mint a valid receipt code.
+define('QR_SECRET', 'khdkvsKDauliweoi3qcbuvopruwobvupwvupwurv9euvpwuto8vt8e0ybebyvpysiuouvuiybieoovwiru2902');
+
+define('QR_SIZE', 220);          // pixel size of a generated code
+define('QR_MARGIN', 2);          // quiet zone, in modules
+
+// Alphabet for the short code printed under the QR. Crockford-style:
+// I, L, O and U are left out because they are misread as 1, 1, 0 and V
+// when someone types the code off a printed receipt.
+define('QR_ALPHABET', '0123456789ABCDEFGHJKMNPQRSTVWXYZ');
+
+// ---------- Batch operations ----------
+// How long a staged preview stays valid before the confirm step is
+// rejected. Short on purpose: the preview describes the catalogue as it
+// was when it was generated.
+define('BATCH_STAGE_TTL', 900);          // 15 minutes
+
+// Upper bound on rows accepted in one file, so a stray 200MB export
+// cannot exhaust memory.
+define('BATCH_MAX_ROWS', 2000);
+
+// Largest import file accepted, in bytes.
+define('BATCH_MAX_UPLOAD', 2 * 1024 * 1024);
+
+// Typed by the admin to confirm a permanent deletion.
+define('BATCH_DELETE_PHRASE', 'DELETE');
+
+// ---------- Remember me ----------
+define('REMEMBER_COOKIE', 'mobile2u_remember');
+
+// How long a "remember me" cookie lasts, in days.
+define('REMEMBER_DAYS', 30);
+
+// A member may stay signed in on this many devices at once. The oldest
+// is dropped when the limit is passed, so an abandoned laptop from six
+// months ago does not stay authorised forever.
+define('REMEMBER_MAX_DEVICES', 5);
+
+// ---------- CAPTCHA ----------
+// 'image'     : gregwar/captcha, generated locally. No network needed,
+//               so a demonstration cannot fail because of the Wi-Fi.
+// 'recaptcha' : Google reCAPTCHA v2, needs keys and an internet connection.
+// 'off'       : disabled, for development.
+define('CAPTCHA_DRIVER', 'image');
+
+// How many characters the local image challenge uses.
+define('CAPTCHA_LENGTH', 5);
+
+// A challenge is only accepted for this long, in seconds.
+define('CAPTCHA_TTL', 300);
+
+// Login only asks for a CAPTCHA once someone has already failed this
+// many times. A legitimate member signing in correctly never sees one.
+define('CAPTCHA_ON_LOGIN_AFTER', 1);
+
+// Google reCAPTCHA v2 keys (only used when CAPTCHA_DRIVER is 'recaptcha').
+// Get them from https://www.google.com/recaptcha/admin
+define('RECAPTCHA_SITE_KEY',   'your-site-key-here');
+define('RECAPTCHA_SECRET_KEY', 'your-secret-key-here');
+
 // ---------- Temporary login blocking ----------
 // After this many failed attempts the account is locked for a while.
 define('LOGIN_MAX_ATTEMPTS', 3);
@@ -128,6 +223,28 @@ define('LOGIN_MAX_ATTEMPTS_PER_IP', 10);
 
 // How long to keep the audit rows before they can be pruned.
 define('LOGIN_ATTEMPT_RETENTION_DAYS', 30);
+
+// ---------- Product photos ----------
+// How many photos one product may have.
+define('PRODUCT_MAX_PHOTOS', 8);
+
+// ---------- Product reviews ----------
+// Only members who actually bought the product may review it. These
+// are the order statuses that count as a completed purchase.
+define('REVIEW_ELIGIBLE_ORDER_STATUSES', ['shipped', 'delivered']);
+
+define('REVIEW_BODY_MIN', 10);
+define('REVIEW_BODY_MAX', 1500);
+define('REVIEW_TITLE_MAX', 120);
+
+// Star labels shown next to the rating input.
+define('REVIEW_RATING_LABELS', [
+    1 => 'Poor',
+    2 => 'Fair',
+    3 => 'Good',
+    4 => 'Very good',
+    5 => 'Excellent',
+]);
 
 // ---------- Product stock ----------
 // Fallback low-stock threshold for products created before the

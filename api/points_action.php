@@ -8,28 +8,12 @@
 
 require_once __DIR__ . '/../lib/init.php';
 
-header('Content-Type: application/json; charset=utf-8');
-
-function points_json(array $payload): void
-{
-    echo json_encode($payload);
-    exit;
-}
-
-if (!is_member()) {
-    points_json([
-        'status'   => 'error',
-        'message'  => 'Please log in as a member to use reward points.',
-        'redirect' => '/auth/login.php',
-    ]);
-}
-
-if (!is_post() || !csrf_valid()) {
-    points_json(['status' => 'error', 'message' => 'Invalid request. Please refresh the page.']);
-}
+// One call replaces the role check, the POST check and the CSRF
+// check that used to be copy-pasted into every endpoint.
+ajax_guard_post('member');
 
 if (!points_module_ready()) {
-    points_json([
+    json_out([
         'status'  => 'error',
         'message' => 'Reward points are not set up yet. Run database/migration_12_points.sql.',
     ]);
@@ -68,7 +52,7 @@ function points_totals(float $subtotal, float $voucherDiscount, float $pointsDis
 if ($action === 'remove') {
     clear_points_session();
 
-    points_json(array_merge([
+    json_out(array_merge([
         'status'    => 'success',
         'applied'   => false,
         'message'   => 'Reward points removed.',
@@ -79,23 +63,23 @@ if ($action === 'remove') {
 
 // ---------- Apply ----------
 if ($action !== 'apply') {
-    points_json(['status' => 'error', 'message' => 'Invalid request.']);
+    json_out(['status' => 'error', 'message' => 'Invalid request.']);
 }
 
 if ($subtotal <= 0) {
-    points_json(['status' => 'error', 'message' => 'Your cart is empty.']);
+    json_out(['status' => 'error', 'message' => 'Your cart is empty.']);
 }
 
 $points = post_int('points') ?? 0;
 $check  = check_points_redemption($userId, $points, $afterVoucher);
 
 if (!$check['ok']) {
-    points_json(['status' => 'error', 'message' => $check['reason']]);
+    json_out(['status' => 'error', 'message' => $check['reason']]);
 }
 
 apply_points_to_session($check['points']);
 
-points_json(array_merge([
+json_out(array_merge([
     'status'     => 'success',
     'applied'    => true,
     'points'     => $check['points'],

@@ -7,6 +7,7 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+require_once __DIR__ . '/../includes/admin_rows.php';
 
 $title = 'Stock Control - Admin';
 
@@ -112,7 +113,15 @@ $selectedId = get_int('product');
 $selected   = $selectedId === null
     ? null
     : db_one('SELECT * FROM products WHERE id = ?', [$selectedId]);
-$history    = $selected ? stock_movements((int)$selected['id'], 30) : [];
+
+// An AJAX search must return the ROWS only. Returning the whole page is
+// what made the admin panel render inside its own table body.
+if (is_ajax()) {
+    admin_stock_rows($products, $q, $filter, $selected ? (int)$selected['id'] : null);
+    exit;
+}
+
+$history = $selected ? stock_movements((int)$selected['id'], 30) : [];
 
 $filterOptions = [
     'out' => 'Out of stock',
@@ -136,7 +145,8 @@ include __DIR__ . '/../includes/admin_header.php';
                 <noscript><?php html_submit('Filter', ['class' => 'btn-outline btn-sm']); ?></noscript>
             </form>
 
-            <form action="/admin/stock.php" method="GET" class="admin-search-form">
+            <form action="/admin/stock.php" method="GET" class="admin-search-form"
+                  data-target="#stockTableBody">
                 <?php if ($filter !== '') { html_hidden('filter', $filter); } ?>
                 <input type="text" name="q" value="<?= e($q) ?>"
                        placeholder="Search product or category..." class="admin-search-input">
@@ -213,42 +223,9 @@ include __DIR__ . '/../includes/admin_header.php';
                                 <th></th>
                             </tr>
                         </thead>
-                        <tbody>
-                        <?php if (count($products) === 0): ?>
-                            <tr><td colspan="6" class="table-empty">No products match.</td></tr>
-                        <?php else: ?>
-                            <?php foreach ($products as $p): ?>
-                                <?php
-                                    $state = stock_state($p);
-                                    $badge = match ($state) {
-                                        'out' => 'badge-danger',
-                                        'low' => 'badge-warning',
-                                        default => 'badge-success',
-                                    };
-                                    $isSelected = $selected && (int)$selected['id'] === (int)$p['id'];
-                                ?>
-                                <tr class="<?= $isSelected ? 'row-selected' : '' ?>">
-                                    <td class="cell-thumb">
-                                        <img src="<?= e(product_image($p['image'])) ?>" alt="" class="table-thumb">
-                                    </td>
-                                    <td>
-                                        <strong><?= e($p['name']) ?></strong><br>
-                                        <small class="muted"><?= e($p['category_name'] ?: 'Uncategorised') ?></small>
-                                    </td>
-                                    <td><strong class="stock-number"><?= (int)$p['stock'] ?></strong></td>
-                                    <td class="muted"><?= reorder_level($p) ?></td>
-                                    <td>
-                                        <span class="badge <?= $badge ?>">
-                                            <?= $state === 'out' ? 'Out' : ($state === 'low' ? 'Low' : 'OK') ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <a href="/admin/stock.php?product=<?= (int)$p['id'] ?><?= $q !== '' ? '&amp;q=' . urlencode($q) : '' ?>"
-                                           class="btn-outline btn-sm">Manage</a>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
+                        <tbody id="stockTableBody">
+                        <?php admin_stock_rows($products, $q, $filter,
+                                                       $selected ? (int)$selected['id'] : null); ?>
                         </tbody>
                     </table>
                 </div>

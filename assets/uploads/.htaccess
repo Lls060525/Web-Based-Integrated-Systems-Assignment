@@ -1,0 +1,11 @@
+# Uploaded files must be served as data, never executed as scripts.
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag engine off
+</IfModule>
+
+<FilesMatch "\.(php|phtml|php3|php4|php5|php7|php8|phps|cgi|pl|asp|aspx|shtml|sh)$">
+    Require all denied
+</FilesMatch>

@@ -9,28 +9,12 @@
 
 require_once __DIR__ . '/../lib/init.php';
 
-header('Content-Type: application/json; charset=utf-8');
-
-function voucher_json(array $payload): void
-{
-    echo json_encode($payload);
-    exit;
-}
-
-if (!is_member()) {
-    voucher_json([
-        'status'   => 'error',
-        'message'  => 'Please log in as a member to use a voucher.',
-        'redirect' => '/auth/login.php',
-    ]);
-}
-
-if (!is_post() || !csrf_valid()) {
-    voucher_json(['status' => 'error', 'message' => 'Invalid request. Please refresh the page.']);
-}
+// One call replaces the role check, the POST check and the CSRF
+// check that used to be copy-pasted into every endpoint.
+ajax_guard_post('member');
 
 if (!voucher_module_ready()) {
-    voucher_json([
+    json_out([
         'status'  => 'error',
         'message' => 'Vouchers are not set up yet. Run database/migration_10_voucher.sql.',
     ]);
@@ -54,7 +38,7 @@ $action = post('action');
 if ($action === 'remove') {
     clear_voucher_session();
 
-    voucher_json([
+    json_out([
         'status'   => 'success',
         'applied'  => false,
         'message'  => 'Voucher removed.',
@@ -66,28 +50,28 @@ if ($action === 'remove') {
 
 // ---------- Apply ----------
 if ($action !== 'apply') {
-    voucher_json(['status' => 'error', 'message' => 'Invalid request.']);
+    json_out(['status' => 'error', 'message' => 'Invalid request.']);
 }
 
 $code = post('code');
 
 if ($code === '') {
-    voucher_json(['status' => 'error', 'message' => 'Please enter a voucher code.']);
+    json_out(['status' => 'error', 'message' => 'Please enter a voucher code.']);
 }
 
 if ($subtotal <= 0) {
-    voucher_json(['status' => 'error', 'message' => 'Your cart is empty.']);
+    json_out(['status' => 'error', 'message' => 'Your cart is empty.']);
 }
 
 $check = check_voucher($code, $userId, $subtotal);
 
 if (!$check['ok']) {
-    voucher_json(['status' => 'error', 'message' => $check['reason']]);
+    json_out(['status' => 'error', 'message' => $check['reason']]);
 }
 
 apply_voucher_to_session($check['voucher']['code']);
 
-voucher_json([
+json_out([
     'status'       => 'success',
     'applied'      => true,
     'code'         => $check['voucher']['code'],
