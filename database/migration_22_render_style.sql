@@ -1,31 +1,31 @@
 -- ============================================================
--- Mobile2U - 规格的显示方式改成「明确设定」而不是「自动推断」
+-- Mobile2U - Display style becomes an explicit setting, not an inference
 --
--- 先跑 migration_21_option_style.sql，再跑这个。
+-- Run migration_21_option_style.sql first, then this one.
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 1. 这个规格要怎么显示
+-- 1. How this spec is drawn
 --
--- 原本的做法是「只要有选项填了颜色，整组就变成色票」。
--- 那是错的：<input type="color"> 就算没去动它，送出来也是
--- #000000，通过 hex 检查后就被存起来 —— 于是 RAM 的选项拿到
--- 黑色色票，整组莫名其妙变成色票。
+-- The old rule was: if any choice carries a colour, draw the group as swatches.
+-- That was wrong. <input type="color"> posts #000000 even when nobody
+-- touches it, it passed the hex check and was stored, so RAM options quietly
+-- picked up a black swatch and RAM started rendering as colour circles.
 --
--- 显示方式是规格自己的属性，不该从选项的资料反推。
---   tile   一般磁贴：名称在上、价差在下（容量、保固）
---   swatch 颜色圆点（只有颜色需要）
+-- How a spec is drawn is a property of the spec, not something to
+--   tile   name above, price difference below (storage, warranty)
+--   swatch a circle of colour (colour, and nothing else)
 -- ------------------------------------------------------------
 ALTER TABLE `spec_attributes`
     ADD COLUMN `render_style` ENUM('tile','swatch') NOT NULL DEFAULT 'tile' AFTER `is_selectable`;
 
 
 -- ------------------------------------------------------------
--- 2. 把看起来真的是颜色的那些标成 swatch
+-- 2. Mark the ones that genuinely are colours
 --
--- 只认名称像颜色的，其余一律留 tile。
+-- Only names that look like a colour; everything else stays a tile.
 -- ------------------------------------------------------------
 UPDATE `spec_attributes`
    SET `render_style` = 'swatch'
@@ -35,9 +35,9 @@ UPDATE `spec_attributes`
 
 
 -- ------------------------------------------------------------
--- 3. 清掉误存到非颜色规格上的色票
+-- 3. Clear swatches wrongly stored on non-colour specs
 --
--- 这些就是上面那个 bug 留下来的 #000000。
+-- These are the #000000 values the bug above left behind.
 -- ------------------------------------------------------------
 UPDATE `product_spec_options` o
   JOIN `spec_attributes` a ON a.id = o.attribute_id
@@ -46,10 +46,10 @@ UPDATE `product_spec_options` o
 
 
 -- ------------------------------------------------------------
--- 4. 让顾客先选颜色再选容量
+-- 4. Ask for the colour before the storage
 --
--- 手机网站的顺序都是「先挑外观，再挑规格」，因为颜色会换图，
--- 先看到实体长什么样比较自然。
+-- Every phone site asks for the finish first, because the colour changes the
+-- photograph and it is natural to see the object before configuring it.
 -- ------------------------------------------------------------
 UPDATE `spec_attributes`
    SET `sort_order` = 5
@@ -57,7 +57,7 @@ UPDATE `spec_attributes`
 
 
 -- ------------------------------------------------------------
--- 5. 确认
+-- 5. Verify
 -- ------------------------------------------------------------
 SELECT `render_style`, COUNT(*) AS attributes
   FROM `spec_attributes`

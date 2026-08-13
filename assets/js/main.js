@@ -33,6 +33,94 @@ $(function () {
     // Server-rendered flash messages fade in and out on their own.
     $('.toast-message').not('.js-toast').fadeIn(400).delay(3000).fadeOut(400);
 
+    /* ---------- Mobile navigation ---------- */
+    /*
+     * The panel is closed by CSS (display: none) and opened by adding a
+     * class, so with JavaScript off the links are simply always in the
+     * flow rather than being unreachable behind a button that does
+     * nothing. That is why .nav is hidden only inside the media query.
+     */
+    var $navToggle = $('#navToggle');
+
+    if ($navToggle.length) {
+        $navToggle.on('click', function () {
+            var open = $('#mainNav').toggleClass('is-open').hasClass('is-open');
+
+            $navToggle.attr('aria-expanded', open ? 'true' : 'false')
+                      .find('i')
+                      .toggleClass('fa-bars', !open)
+                      .toggleClass('fa-xmark', open);
+        });
+
+        // Tapping outside, or pressing Escape, closes it.
+        $(document).on('click', function (e) {
+            if (!$(e.target).closest('.topbar-inner').length) {
+                $('#mainNav').removeClass('is-open');
+                $navToggle.attr('aria-expanded', 'false')
+                          .find('i').addClass('fa-bars').removeClass('fa-xmark');
+            }
+        });
+
+        $(document).on('keydown', function (e) {
+            if (e.key === 'Escape' && $('#mainNav').hasClass('is-open')) {
+                $navToggle.trigger('click');
+            }
+        });
+
+        /* Growing past the breakpoint leaves .is-open applied to a nav
+         * that is a plain row again. Harmless there, but it would come
+         * back open on the way down, so it is cleared. */
+        $(window).on('resize', function () {
+            if (window.innerWidth > 720 && $('#mainNav').hasClass('is-open')) {
+                $('#mainNav').removeClass('is-open');
+                $navToggle.attr('aria-expanded', 'false')
+                          .find('i').addClass('fa-bars').removeClass('fa-xmark');
+            }
+        });
+    }
+
+    /* ---------- Show / hide password ---------- */
+    /*
+     * Delegated, so it also covers any password field added to the page
+     * later. The input's type is swapped rather than a second field
+     * being shown, which keeps the value, the cursor position and the
+     * browser's password manager all pointing at one element.
+     */
+    $(document).on('click', '.password-toggle', function () {
+        var $btn   = $(this);
+        var $input = $btn.closest('.password-field').find('input').first();
+
+        if ($input.length === 0) { return; }
+
+        var reveal = $input.attr('type') === 'password';
+
+        $input.attr('type', reveal ? 'text' : 'password');
+
+        $btn.attr('aria-pressed', reveal ? 'true' : 'false')
+            .attr('aria-label', reveal ? 'Hide password' : 'Show password')
+            .find('i')
+            .toggleClass('fa-eye', !reveal)
+            .toggleClass('fa-eye-slash', reveal);
+
+        // Focus goes back to the field, at the end of the text, so the
+        // person can keep typing. Without this the caret jumps to the
+        // start on some browsers when the type changes.
+        var value = $input.val();
+
+        $input.trigger('focus').val('').val(value);
+    });
+
+    // A revealed password must not survive the page.
+    // pageshow fires on a back/forward restore, which would otherwise
+    // bring the form back with the password still in plain sight.
+    $(window).on('pageshow', function () {
+        $('.password-field input[type="text"]').attr('type', 'password');
+        $('.password-toggle')
+            .attr('aria-pressed', 'false')
+            .attr('aria-label', 'Show password')
+            .find('i').addClass('fa-eye').removeClass('fa-eye-slash');
+    });
+
     /* ---------- Generic confirmation ---------- */
     // Replaces every inline onclick="return confirm(...)".
 

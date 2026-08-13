@@ -124,28 +124,36 @@ include __DIR__ . '/includes/header.php';
                     <?= nl2br(e($order['shipping_address'])) ?>
                 </div>
 
-                <div class="order-card-total">
-                    <a href="/order_detail.php?id=<?= (int)$order['id'] ?>" class="btn-outline btn-sm">
-                        View Detail
-                    </a>
+                <?php // The buttons and the total are separate rows.
+                      // They used to share one non-wrapping flex row, so on a
+                      // narrow screen the total was pushed off the right edge
+                      // and clipped -- the one number on the card that matters. ?>
+                <div class="order-card-side">
+                    <div class="order-card-amount">
+                        <?php if ((float)($order['discount_amount'] ?? 0) > 0): ?>
+                            <span class="badge badge-success saved-badge">
+                                Saved <?= e(money($order['discount_amount'])) ?>
+                            </span>
+                        <?php endif; ?>
 
-                    <a href="/receipt.php?id=<?= (int)$order['id'] ?>" class="btn-outline btn-sm">
-                        Receipt
-                    </a>
+                        <span class="order-total-label">Order Total:</span>
+                        <strong class="price price-lg"><?= e(money($order['total_amount'])) ?></strong>
+                    </div>
 
-                    <?php if ($canCancel): ?>
-                        <a href="/order_cancel.php?id=<?= (int)$order['id'] ?>"
-                           class="btn-outline btn-sm btn-danger">Cancel Order</a>
-                    <?php endif; ?>
+                    <div class="order-card-actions">
+                        <a href="/order_detail.php?id=<?= (int)$order['id'] ?>" class="btn-outline btn-sm">
+                            View Detail
+                        </a>
 
-                    <?php if ((float)($order['discount_amount'] ?? 0) > 0): ?>
-                        <span class="badge badge-success saved-badge">
-                            Saved <?= e(money($order['discount_amount'])) ?>
-                        </span>
-                    <?php endif; ?>
+                        <a href="/receipt.php?id=<?= (int)$order['id'] ?>" class="btn-outline btn-sm">
+                            Receipt
+                        </a>
 
-                    <span>Order Total:</span>
-                    <strong class="price price-lg"><?= e(money($order['total_amount'])) ?></strong>
+                        <?php if ($canCancel): ?>
+                            <a href="/order_cancel.php?id=<?= (int)$order['id'] ?>"
+                               class="btn-outline btn-sm btn-danger">Cancel Order</a>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
 

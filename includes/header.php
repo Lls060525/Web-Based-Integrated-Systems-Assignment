@@ -41,6 +41,16 @@ if (is_member()) {
 <body>
 <header class="topbar">
     <div class="container topbar-inner">
+
+        <?php /* Hamburger. Rendered on every screen but only shown by CSS
+                 below 720px, so the desktop bar is untouched. */ ?>
+        <?php if (!$is_auth_page): ?>
+            <button type="button" class="nav-toggle" id="navToggle"
+                    aria-label="Menu" aria-expanded="false" aria-controls="mainNav">
+                <i class="fas fa-bars" aria-hidden="true"></i>
+            </button>
+        <?php endif; ?>
+
         <div class="logo"><a href="/"><?= e(APP_NAME) ?></a></div>
 
         <?php if (!$is_auth_page): ?>
@@ -52,30 +62,90 @@ if (is_member()) {
             <div class="topbar-spacer"></div>
         <?php endif; ?>
 
-        <nav class="nav">
+        <?php /* The two actions a shopper reaches for most stay OUTSIDE the
+                 collapsible menu, as icons, so they are always one tap away.
+                 Everything else folds away behind the hamburger. */ ?>
+        <?php if (!$is_auth_page && is_member()): ?>
+            <div class="nav-quick">
+                <a href="/member/wishlist.php" class="nav-quick-link" aria-label="Wishlist">
+                    <i class="far fa-heart" aria-hidden="true"></i>
+                    <span class="wishlist-count"><?= $wishlist_total ?></span>
+                </a>
+                <a href="/cart.php" class="nav-quick-link" aria-label="Cart">
+                    <i class="fas fa-cart-shopping" aria-hidden="true"></i>
+                    <span class="cart-count"><?= $cart_count ?></span>
+                </a>
+            </div>
+        <?php endif; ?>
+
+        <?php /* Every entry has the same shape: icon, label, and an
+                 optional count badge. The bar used to mix plain text
+                 (Home), icon plus number (star, heart) and text plus
+                 badge (Cart), which read as three different kinds of
+                 control sitting in one row. */ ?>
+        <nav class="nav" id="mainNav">
             <?php if (!$is_auth_page): ?>
-                <a href="/">Home</a>
-                <a href="/products.php">Products</a>
+                <a href="/">
+                    <i class="fas fa-house" aria-hidden="true"></i>
+                    <span class="nav-label">Home</span>
+                </a>
+                <a href="/products.php">
+                    <i class="fas fa-box" aria-hidden="true"></i>
+                    <span class="nav-label">Products</span>
+                </a>
 
                 <?php if (is_member()): ?>
                     <a href="/member/points.php" title="Reward points">
-                        <i class="fas fa-star"></i>
-                        <span class="points-count"><?= number_format($points_total) ?></span>
+                        <i class="fas fa-star" aria-hidden="true"></i>
+                        <span class="nav-label">Points</span>
+                        <span class="nav-count points-count"><?= number_format($points_total) ?></span>
                     </a>
-                    <a href="/member/wishlist.php">
-                        <i class="far fa-heart"></i>
-                        <span class="wishlist-count"><?= $wishlist_total ?></span>
+
+                    <?php /* Hidden on mobile: .nav-quick in the bar shows these
+                             two as icons there. Only one copy is ever visible. */ ?>
+                    <a href="/member/wishlist.php" class="nav-dup">
+                        <i class="far fa-heart" aria-hidden="true"></i>
+                        <span class="nav-label">Wishlist</span>
+                        <span class="nav-count wishlist-count"><?= $wishlist_total ?></span>
                     </a>
-                    <a href="/cart.php">Cart <span class="cart-count"><?= $cart_count ?></span></a>
-                    <a href="/member/profile.php">Profile</a>
-                    <a href="/orders.php">Orders</a>
-                    <a href="/auth/logout.php" class="logout-link">Log Out</a>
+                    <a href="/cart.php" class="nav-dup">
+                        <i class="fas fa-cart-shopping" aria-hidden="true"></i>
+                        <span class="nav-label">Cart</span>
+                        <span class="nav-count cart-count"><?= $cart_count ?></span>
+                    </a>
+
+                    <a href="/member/profile.php">
+                        <i class="fas fa-user" aria-hidden="true"></i>
+                        <span class="nav-label">Profile</span>
+                    </a>
+                    <a href="/orders.php">
+                        <i class="fas fa-receipt" aria-hidden="true"></i>
+                        <span class="nav-label">Orders</span>
+                    </a>
+                    <a href="/auth/logout.php" class="logout-link">
+                        <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
+                        <span class="nav-label">Log Out</span>
+                    </a>
+
                 <?php elseif (is_admin()): ?>
-                    <a href="/admin/dashboard.php">Admin Panel</a>
-                    <a href="/auth/logout.php" class="logout-link">Log Out</a>
+                    <a href="/admin/dashboard.php">
+                        <i class="fas fa-gauge-high" aria-hidden="true"></i>
+                        <span class="nav-label">Admin Panel</span>
+                    </a>
+                    <a href="/auth/logout.php" class="logout-link">
+                        <i class="fas fa-right-from-bracket" aria-hidden="true"></i>
+                        <span class="nav-label">Log Out</span>
+                    </a>
+
                 <?php else: ?>
-                    <a href="/auth/login.php">Login</a>
-                    <a href="/auth/register.php">Register</a>
+                    <a href="/auth/login.php">
+                        <i class="fas fa-right-to-bracket" aria-hidden="true"></i>
+                        <span class="nav-label">Login</span>
+                    </a>
+                    <a href="/auth/register.php" class="logout-link">
+                        <i class="fas fa-user-plus" aria-hidden="true"></i>
+                        <span class="nav-label">Register</span>
+                    </a>
                 <?php endif; ?>
             <?php endif; ?>
         </nav>

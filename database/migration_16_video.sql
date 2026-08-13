@@ -1,24 +1,24 @@
 -- ============================================================
 -- Mobile2U - Product Video (YouTube) module
 --
--- 独立档案，因为 phpMyAdmin 遇到第一个错误就会停。
--- 用法：phpMyAdmin → 选 mobile2u → SQL 分页 → 贴上 → Go
+-- Its own file, because phpMyAdmin stops at the first error.
+-- Usage: phpMyAdmin -> select mobile2u -> SQL tab -> paste -> Go
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 商品影片
+-- Product video
 --
--- 只存「影片 ID」，不存整条网址。理由：
---   1. YouTube 有六七种网址格式 (watch / youtu.be / embed /
---      shorts / live，还可能带 &t= 时间戳和一堆追踪参数)。
---      入库前正规化成 ID，之后所有地方都只处理一种形式。
---   2. 存网址等于把使用者贴进来的任意字串直接塞进 iframe 的 src，
---      那是注入风险。ID 只允许 [A-Za-z0-9_-]{11}，正则挡完才入库。
---   3. 需要缩图、embed、观看连结时，各自从 ID 组出来就好。
+-- Only the video ID is stored, never the whole URL. Reasons:
+--   1. YouTube has half a dozen URL shapes (watch / youtu.be / embed /
+--      shorts / live, plus &t= timestamps and tracking parameters).
+--      Normalising to an ID on the way in means one shape everywhere after.
+--   2. Storing a URL means pasting an arbitrary user string into an iframe
+--      src, which is an injection risk. An ID is [A-Za-z0-9_-]{11}, checked
+--   3. Thumbnails, embeds and watch links are all built from the ID.
 --
--- video_title 是选填的说明文字，显示在影片旁边。
+-- video_title is optional caption text shown beside the video.
 -- ------------------------------------------------------------
 ALTER TABLE `products`
     ADD COLUMN `video_id`    VARCHAR(20)  NULL DEFAULT NULL,
@@ -26,6 +26,6 @@ ALTER TABLE `products`
 
 
 -- ------------------------------------------------------------
--- 确认
+-- Verify
 -- ------------------------------------------------------------
 SHOW COLUMNS FROM `products` LIKE 'video%';

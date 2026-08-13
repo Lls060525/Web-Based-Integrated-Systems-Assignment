@@ -1,27 +1,27 @@
 -- ============================================================
 -- Mobile2U - Product Rating + Review module
 --
--- 独立档案，因为 phpMyAdmin 遇到第一个错误就会停。
--- 用法：phpMyAdmin → 选 mobile2u → SQL 分页 → 贴上 → Go
+-- Its own file, because phpMyAdmin stops at the first error.
+-- Usage: phpMyAdmin -> select mobile2u -> SQL tab -> paste -> Go
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 商品评价
+-- Product reviews
 --
--- UNIQUE(user_id, product_id)：一个会员对一件商品只能有一则评价。
--- 想改就改自己那一则，不能洗版。
+-- UNIQUE(user_id, product_id): one review per member per product.
+-- They can edit their own; they cannot flood the page.
 --
--- order_id 记录「是哪一张订单让你有资格评价」。这就是
--- verified purchase 的凭证 —— 没买过就写不了。
--- 用 ON DELETE SET NULL，订单万一被删评价内容仍然保留。
+-- order_id records which order earned the right to review. That is the
+-- verified-purchase proof: no purchase, no review.
+-- ON DELETE SET NULL, so the review survives if the order is ever removed.
 --
--- 刻意「不」在 products 上放 rating_avg / rating_count 快取栏位。
--- 评价的写入频率极低，平均值用 AVG() 当场算完全够快，
--- 而且永远不会跟实际评价对不上。
--- (库存那边保留快取栏位是因为并发扣减需要原子条件更新，
---  评价没有那个需求，所以两边的取舍不同。)
+-- There are deliberately NO rating_avg / rating_count columns on products.
+-- Reviews are written rarely, AVG() is fast enough on demand, and the
+-- number can never disagree with the reviews themselves.
+-- (Stock keeps a cached column because concurrent decrements need an atomic
+--  conditional update. Reviews have no such need, so the trade-off differs.)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `reviews` (
     `id`         INT(11)      NOT NULL AUTO_INCREMENT,
@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS `reviews` (
         FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`)
         ON DELETE SET NULL ON UPDATE CASCADE,
 
-    -- 星等只能是 1 到 5。资料库层挡住，不只靠 PHP。
+    -- Rating must be 1 to 5, enforced by the database and not only by PHP.
     CONSTRAINT `chk_reviews_rating` CHECK (`rating` BETWEEN 1 AND 5)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
@@ -61,6 +61,6 @@ CREATE TABLE IF NOT EXISTS `reviews` (
 
 
 -- ------------------------------------------------------------
--- 确认
+-- Verify
 -- ------------------------------------------------------------
 SELECT COUNT(*) AS reviews_table_ready FROM `reviews`;

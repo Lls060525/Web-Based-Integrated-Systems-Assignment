@@ -77,8 +77,31 @@ function post_int(string $key): ?int
 function redirect(string $url = ''): void
 {
     if ($url === '') {
-        $url = $_SERVER['REQUEST_URI'];
+        $url = $_SERVER['REQUEST_URI'] ?? '/';
     }
+
+    /* Only ever redirect to a path on this site.
+     *
+     * Two ways an off-site redirect could otherwise slip in:
+     *
+     *   - "//evil.com" is a PROTOCOL-RELATIVE url. It looks like a path
+     *     because it starts with a slash, but a browser reads it as an
+     *     absolute address on another host. REQUEST_URI can be made to
+     *     start with it, and that is the default value above.
+     *   - "https://evil.com" if a caller ever passes one through from
+     *     user input.
+     *
+     * An open redirect is what turns a link that genuinely begins on
+     * this domain into a working phishing link, so the rule is that the
+     * target must start with exactly one slash.
+     */
+    if (!preg_match('~^/(?!/)~', $url)) {
+        $url = '/';
+    }
+
+    // header() has rejected newlines since PHP 5.1.2, so response
+    // splitting is not possible here; the check above is about the
+    // destination, not the header.
     header('Location: ' . $url);
     exit;
 }
@@ -244,10 +267,47 @@ function html_email(string $key, $default = '', array $attr = []): void
     html_input('email', $key, temp($key, $default), $attr);
 }
 
+/**
+ * Password field with a show/hide toggle.
+ *
+ * The toggle is built in here rather than added page by page, so all
+ * eleven password fields in the project get it from one change and
+ * cannot drift apart.
+ *
+ * The button is type="button" on purpose: a bare <button> inside a form
+ * defaults to type="submit", so leaving it off would make the eye icon
+ * submit the login form.
+ *
+ * Pass ['toggle' => false] to leave it off.
+ */
 function html_password(string $key, array $attr = []): void
 {
+    $showToggle = $attr['toggle'] ?? true;
+    unset($attr['toggle']);
+
+    if (!$showToggle) {
+        // Never echo a password back to the browser.
+        html_input('password', $key, '', $attr);
+        return;
+    }
+
+    $id = $attr['id'] ?? $key;
+
+    echo '<div class="password-field">';
+
     // Never echo a password back to the browser.
     html_input('password', $key, '', $attr);
+
+    // aria-pressed tells a screen reader whether the password is
+    // currently visible; aria-label gives the button a name, since it
+    // contains only an icon.
+    echo '<button type="button" class="password-toggle"'
+       . ' aria-label="Show password" aria-pressed="false"'
+       . ' aria-controls="' . e($id) . '" tabindex="-1">'
+       . '<i class="fas fa-eye" aria-hidden="true"></i>'
+       . '</button>';
+
+    echo '</div>';
 }
 
 function html_number(string $key, $default = '', array $attr = []): void

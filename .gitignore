@@ -1,0 +1,29 @@
+# Real credentials never belong in the repository.
+# Copy lib/config.example.php to lib/config.php and fill it in locally.
+lib/config.php
+
+# Dependencies, restored with: composer install
+/vendor/
+
+# Runtime output
+/storage/mail.log
+/storage/receipts/*
+!/storage/receipts/.gitkeep
+
+# Uploaded files
+/assets/uploads/products/*
+/assets/uploads/avatars/*
+!/assets/uploads/*/.gitkeep
+
+# The database export required for submission contains every user row,
+# including password hashes.
+/database/mobile2u.sql
+
+# Editor and OS noise.
+# tasks.json is deliberately NOT ignored: it carries no secrets and it is
+# how a teammate starts the server with router.php rather than without it.
+.vscode/*
+!.vscode/tasks.json
+.idea/
+Thumbs.db
+Desktop.ini

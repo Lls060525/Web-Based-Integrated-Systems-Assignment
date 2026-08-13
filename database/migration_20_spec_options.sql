@@ -1,22 +1,22 @@
 -- ============================================================
--- Mobile2U - Spec 弹性化 + 顾客可选规格（变体）
+-- Mobile2U - Per-product specs and customer-selectable specs (variants)
 --
--- 先跑 migration_19_specs.sql，再跑这个。
--- phpMyAdmin 遇到第一个错误就会停，所以这是独立档案。
+-- Run migration_19_specs.sql first, then this one.
+-- phpMyAdmin stops at the first error, so this is its own file.
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 1. 商品专属规格
+-- 1. Specs that belong to one product
 --
--- 原本 spec_attributes 只能绑分类，所以要加一个规格就得先去
--- 「分类栏位定义」新增，而且整个分类的商品表单都会多一栏。
+-- spec_attributes could only be tied to a category, so adding one spec meant
+-- defining it for the category, and every product in it grew an empty field.
 --
--- 加上 product_id 之后就有三种範围：
---   product_id 有值            → 只属于这一个商品（想加就加）
---   category_id 有值           → 该分类的商品共用
---   两个都 NULL                → 全站通用（例如保固）
+-- With product_id there are now three scopes:
+--   product_id set    -> this product only (add one whenever you like)
+--   category_id set   -> shared by that category
+--   both NULL         -> the whole shop (Warranty, for example)
 -- ------------------------------------------------------------
 ALTER TABLE `spec_attributes`
     ADD COLUMN `product_id` INT(11) NULL DEFAULT NULL AFTER `category_id`;
@@ -31,21 +31,21 @@ ALTER TABLE `spec_attributes`
 
 
 -- ------------------------------------------------------------
--- 2. 这个规格要不要让顾客在购买时选
+-- 2. Whether the customer picks this spec when buying
 -- ------------------------------------------------------------
 ALTER TABLE `spec_attributes`
     ADD COLUMN `is_selectable` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_comparable`;
 
 
 -- ------------------------------------------------------------
--- 3. 每个商品可选的选项
+-- 3. The choices each product offers
 --
--- 为什么选项要绑「商品」而不是绑「规格栏位」：
---   同样是「颜色」，A 手机有黑/白，B 手机有蓝/绿。
---   把选项存在栏位定义上，就等于全部商品共用同一组颜色。
+-- Why the choices belong to the PRODUCT rather than to the attribute:
+--   "Colour" means black/white on one phone and blue/green on another.
+--   Storing the list on the definition would give every product one palette.
 --
--- price_delta 让不同选项可以有价差（256GB 比 128GB 贵）。
--- 允许负数，因为「上一代配色 -50」也是合理的。
+-- price_delta lets choices differ in price (256GB costs more than 128GB).
+-- Negative is allowed: last year's colourway at -50 is a real thing.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `product_spec_options` (
     `id`           INT(11)       NOT NULL AUTO_INCREMENT,
@@ -73,18 +73,18 @@ CREATE TABLE IF NOT EXISTS `product_spec_options` (
 
 
 -- ------------------------------------------------------------
--- 4. 购物车要记住顾客选了什么
+-- 4. The cart remembers what the customer chose
 --
--- options_signature 是正规化过的字串，格式 "栏位id:值|栏位id:值"，
--- 而且一定照栏位 id 由小到大排。
+-- options_signature is a canonical string, "attributeId:value|attributeId:value",
+-- always sorted by attribute id ascending.
 --
--- 为什么要正规化：
---   「黑色 + 256GB」跟「256GB + 黑色」是同一件商品。
---   不排序的话会产生两个不同字串，购物车就会出现两行一模一样的
---   东西，数量也永远合併不起来。
+-- Why canonical:
+--   "Black + 256GB" and "256GB + Black" are the same product.
+--   Without a fixed order they produce two different strings, so the cart
+--   shows two identical-looking lines whose quantities never merge.
 --
--- 用 '' 而不是 NULL 代表「没有选项」，这样 WHERE ... = ? 就能直接
--- 比对；NULL = NULL 在 SQL 里是 NULL，不是 TRUE。
+-- '' rather than NULL means "no options", so WHERE ... = ? can match it;
+-- NULL = NULL is NULL in SQL, not TRUE.
 -- ------------------------------------------------------------
 ALTER TABLE `cart`
     ADD COLUMN `options_signature` VARCHAR(255) NOT NULL DEFAULT '' AFTER `product_id`;
@@ -94,17 +94,17 @@ ALTER TABLE `cart`
 
 
 -- ------------------------------------------------------------
--- 5. 订单要「快照」顾客当时选的东西
+-- 5. The order snapshots what was chosen
 --
--- 跟 price_at_purchase 同一个道理：选项之后可能被改名或删掉，
--- 但客人当时买的就是「太空灰」。存文字而不是外键，历史才不会
--- 被后来的编辑改写。
+-- Same reasoning as price_at_purchase: an option may later be renamed or
+-- deleted, but the customer bought "Space Grey". Text, not a foreign key,
+-- so a later edit cannot rewrite history.
 -- ------------------------------------------------------------
 ALTER TABLE `order_items`
     ADD COLUMN `options_text` VARCHAR(255) NULL DEFAULT NULL AFTER `product_id`;
 
 
 -- ------------------------------------------------------------
--- 6. 确认
+-- 6. Verify
 -- ------------------------------------------------------------
 SELECT COUNT(*) AS product_spec_options_ready FROM `product_spec_options`;

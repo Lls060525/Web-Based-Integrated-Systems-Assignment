@@ -398,15 +398,15 @@ include __DIR__ . '/includes/header.php';
                             <td class="cell-thumb">
                                 <img src="<?= e(product_image($item['image'])) ?>" alt="" class="cart-thumb">
                             </td>
-                            <td>
+                            <td class="cell-product">
                                 <strong><?= e($item['name']) ?></strong>
                                 <?php if ($item['options_label'] !== ''): ?>
                                     <div class="cart-options"><?= e($item['options_label']) ?></div>
                                 <?php endif; ?>
                             </td>
-                            <td><?= e(money($item['unit_price'])) ?></td>
-                            <td>&times; <?= (int)$item['quantity'] ?></td>
-                            <td class="cell-price"><?= e(money($item['unit_price'] * $item['quantity'])) ?></td>
+                            <td data-label="Unit price"><?= e(money($item['unit_price'])) ?></td>
+                            <td data-label="Quantity">&times; <?= (int)$item['quantity'] ?></td>
+                            <td class="cell-price" data-label="Subtotal"><?= e(money($item['unit_price'] * $item['quantity'])) ?></td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>

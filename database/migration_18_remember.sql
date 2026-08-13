@@ -1,39 +1,39 @@
 -- ============================================================
 -- Mobile2U - Remember Me module
 --
--- 独立档案，因为 phpMyAdmin 遇到第一个错误就会停。
--- 用法：phpMyAdmin → 选 mobile2u → SQL 分页 → 贴上 → Go
+-- Its own file, because phpMyAdmin stops at the first error.
+-- Usage: phpMyAdmin -> select mobile2u -> SQL tab -> paste -> Go
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 长期登入凭证
+-- Long-lived sign-in tokens
 --
--- 关键设计：selector + validator 分离。
--- Cookie 里存的是 "selector:validator" 两段。
+-- Key design: selector and validator are split.
+-- The cookie holds two parts: "selector:validator".
 --
---   selector  明文存、加 UNIQUE 索引，只用来「找到那一列」
---   validator 只存 SHA-256 杂凑，用 hash_equals() 比对
+--   selector  stored in plain text with a UNIQUE index; its only job is to find the row
+--   validator stored only as a SHA-256 hash, compared with hash_equals()
 --
--- 为什么要拆成两段：
---   1. 如果只有一个 token 又要能查询，就得明文存 —— 资料库一外泄，
---      每一个 cookie 都能立刻拿来登入。存杂凑又没办法用索引查，
---      只能整表扫描逐笔比对，慢而且会有时序差异。
---      拆开之后：查询用明文 selector（快、可索引），
---      验证用杂凑 validator（外泄也无法反推）。
---   2. hash_equals() 是定时比较，挡掉时序攻击。
+-- Why split them:
+--   1. A single token that must also be searchable has to be stored in plain
+--      text, so a database leak hands out working cookies. Storing a hash
+--      instead is unindexable, forcing a full scan and leaking timing.
+--      Splitting gives both: an indexed lookup on the selector, and a value
+--      that is useless to anyone who reads the table.
+--   2. hash_equals() is a constant-time comparison, which blocks timing attacks.
 --
--- 每次使用只轮换 validator，selector 故意保持不变（等于「device/series
--- 编号」）。这个不对称是重点：
---   如果连 selector 也换掉，被偷走的旧 cookie 就会查无此列，看起来
---   跟「过期」一模一样，偷窃就侦测不到了。
---   selector 不变 → 那一列还在 → validator 对不上就是铁证：
---   同一个 cookie 被两个浏览器同时持有。
--- 这时 PHP 会把该使用者「所有」凭证一次清空，不管是小偷先访问还是
--- 本人先访问都抓得到。
--- expires_at 每次使用会往后延，所以常用的装置不会突然被登出，
--- 放着 30 天不用的才会自己失效。
+-- Only the validator rotates on each use. The selector deliberately stays
+-- fixed (it identifies the device/series). That asymmetry is the point:
+--   if the selector changed too, a stolen superseded cookie would match no
+--   row at all and look exactly like an expired login, so theft would go undetected.
+--   Fixed selector -> the row is still there -> a wrong validator is proof
+--   that two browsers hold copies of the same cookie.
+-- PHP then destroys every token for that account, whether the thief or the
+-- real owner visits second.
+-- expires_at is pushed forward on each use, so a device in regular use is
+-- never logged out, while one untouched for 30 days lapses on its own.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `remember_tokens` (
     `id`             INT(11)      NOT NULL AUTO_INCREMENT,
@@ -60,12 +60,12 @@ CREATE TABLE IF NOT EXISTS `remember_tokens` (
 
 
 -- ------------------------------------------------------------
--- 顺手清掉过期的（这张表本来就该定期打扫）
+-- Sweep out expired rows; this table needs periodic housekeeping anyway
 -- ------------------------------------------------------------
 DELETE FROM `remember_tokens` WHERE `expires_at` < NOW();
 
 
 -- ------------------------------------------------------------
--- 确认
+-- Verify
 -- ------------------------------------------------------------
 SELECT COUNT(*) AS remember_tokens_ready FROM `remember_tokens`;

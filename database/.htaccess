@@ -1,0 +1,9 @@
+# Not reachable over the web. These files are only ever used from the
+# server side (or, for .git, not used by the application at all).
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>

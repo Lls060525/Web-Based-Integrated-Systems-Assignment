@@ -1,0 +1,59 @@
+# ============================================================
+# Mobile2U - web root protection
+#
+# The document root is the project root, so every file in the project
+# is reachable over HTTP unless something says otherwise. This file is
+# that something.
+#
+# Works on Apache 2.4 (XAMPP) and falls back to 2.2 syntax.
+# ============================================================
+
+# ---------- Dot files and directories ----------
+# .git is the important one. /.git/config alone leaks the remote URL,
+# and the object store lets an attacker reconstruct the ENTIRE source,
+# including lib/config.php with its API keys and mail password.
+<FilesMatch "^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Anything under a dot-directory: .git/, .idea/, .vscode/
+    RewriteRule (^|/)\.(?!well-known) - [F,L]
+</IfModule>
+
+# ---------- Files that are never meant to be fetched ----------
+# .sql   the migrations, and the database export required for submission,
+#        which contains every user row including password hashes
+# .md    the design notes, which describe the internals
+# .log   storage/mail.log records every message the site has sent
+# .lock  composer.lock lists exact dependency versions, which is a
+#        shopping list of known CVEs for whoever is reading
+<FilesMatch "\.(sql|md|log|lock|json|ini|bak|old|orig|dist|sh|yml|yaml)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# ---------- No directory listings ----------
+# Without this, a folder with no index file prints its whole contents.
+Options -Indexes
+
+# ---------- Do not advertise the stack ----------
+<IfModule mod_headers.c>
+    Header unset X-Powered-By
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set Referrer-Policy "same-origin"
+</IfModule>

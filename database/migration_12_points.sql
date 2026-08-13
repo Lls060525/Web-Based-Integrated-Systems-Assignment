@@ -1,27 +1,27 @@
 -- ============================================================
 -- Mobile2U - Reward Point module
 --
--- 独立档案，因为 phpMyAdmin 遇到第一个错误就会停。
--- 用法：phpMyAdmin → 选 mobile2u → SQL 分页 → 贴上 → Go
+-- Its own file, because phpMyAdmin stops at the first error.
+-- Usage: phpMyAdmin -> select mobile2u -> SQL tab -> paste -> Go
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 积分流水帐 (ledger)
+-- Reward point ledger
 --
--- 刻意「不」在 users 上放一个 points_balance 栏位。
--- 余额一律用 SUM(points) 算出来，理由：
---   1. 单一栏位一旦有任何一次更新失败就会跟实际交易对不上，
---      而且对不上之后没有任何方法能查出是哪一笔出错
---   2. 流水帐是 append-only，每一分积分都有来源、去向和时间
---   3. 要对帐时 SUM 就是唯一事实，不会有两个数字互相矛盾
+-- There is deliberately NO points_balance column on users.
+-- The balance is always SUM(points), because:
+--   1. A single cached column drifts the moment one update fails, and once
+--      it has drifted there is no way to find which transaction was wrong
+--   2. The ledger is append-only: every point has a source, a use and a time
+--   3. When reconciling, SUM is the single truth; there is no second number
 --
--- points 是有号数：赚取为正，兑换为负。
--- balance_after 只是给人看的快照，不参与计算。
+-- points is signed: positive when earned, negative when redeemed.
+-- balance_after is a human-readable snapshot only; nothing computes from it.
 --
--- UNIQUE(order_id, type) 保证同一张订单不可能重复发放积分 ——
--- 重新整理付款成功页、或 webhook 重送都不会多给。
+-- UNIQUE(order_id, type) makes double-awarding impossible: refreshing the
+-- payment success page, or a resent webhook, cannot grant points twice.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `point_transactions` (
     `id`            INT(11)      NOT NULL AUTO_INCREMENT,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS `point_transactions` (
 
 
 -- ------------------------------------------------------------
--- 订单记住这笔交易的积分进出
+-- The order remembers the points it earned and spent
 -- ------------------------------------------------------------
 ALTER TABLE `orders`
     ADD COLUMN `points_earned`   INT(11)       NOT NULL DEFAULT 0,
@@ -64,8 +64,8 @@ ALTER TABLE `orders`
 
 
 -- ------------------------------------------------------------
--- 给既有会员一点起始积分，方便 demo 兑换
--- 只发给还没有任何积分纪录的人，重跑不会重复发。
+-- Give existing members a starting balance so redemption can be demoed
+-- Only for members with no ledger entry yet, so re-running grants nothing twice.
 -- ------------------------------------------------------------
 INSERT INTO `point_transactions` (`user_id`, `order_id`, `type`, `points`, `balance_after`, `description`)
 SELECT u.`id`, NULL, 'adjust', 500, 500, 'Welcome bonus'
@@ -78,7 +78,7 @@ SELECT u.`id`, NULL, 'adjust', 500, 500, 'Welcome bonus'
 
 
 -- ------------------------------------------------------------
--- 确认
+-- Verify
 -- ------------------------------------------------------------
 SELECT u.`name`, u.`email`, COALESCE(SUM(t.`points`), 0) AS balance
   FROM `users` u

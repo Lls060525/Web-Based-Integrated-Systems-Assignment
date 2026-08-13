@@ -117,7 +117,7 @@ include __DIR__ . '/includes/header.php';
                 <?php csrf_field(); ?>
                 <?php html_hidden('action', 'update_cart'); ?>
 
-                <div class="card">
+                <div class="card cart-items-card">
                     <table class="cart-table">
                         <thead>
                             <tr>
@@ -135,7 +135,7 @@ include __DIR__ . '/includes/header.php';
                                 <td class="cell-thumb">
                                     <img src="<?= e(product_image($item['image'])) ?>" alt="<?= e($item['name']) ?>" class="cart-thumb">
                                 </td>
-                                <td>
+                                <td class="cell-product">
                                     <strong><?= e($item['name']) ?></strong>
 
                                     <?php if ($item['options_label'] !== ''): ?>
@@ -153,7 +153,7 @@ include __DIR__ . '/includes/header.php';
                                         <br><span class="err">Only <?= (int)$item['stock'] ?> left in stock.</span>
                                     <?php endif; ?>
                                 </td>
-                                <td>
+                                <td data-label="Unit price">
                                     <?= e(money($item['unit_price'])) ?>
                                     <?php if (abs($item['unit_price'] - $item['price']) >= 0.005): ?>
                                         <div class="muted small-note">
@@ -161,14 +161,14 @@ include __DIR__ . '/includes/header.php';
                                         </div>
                                     <?php endif; ?>
                                 </td>
-                                <td>
+                                <td data-label="Quantity">
                                     <input type="number"
                                            name="quantities[<?= (int)$item['cart_id'] ?>]"
                                            value="<?= (int)$item['quantity'] ?>"
                                            min="1" max="<?= (int)$item['stock'] ?>"
                                            class="qty-input update-qty-trigger">
                                 </td>
-                                <td class="cell-price"><?= e(money($subtotal)) ?></td>
+                                <td class="cell-price" data-label="Subtotal"><?= e(money($subtotal)) ?></td>
                                 <td>
                                     <button type="button"
                                             class="btn-outline btn-sm btn-danger js-submit-form"

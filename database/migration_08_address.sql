@@ -1,17 +1,17 @@
 -- ============================================================
 -- Mobile2U - Shipping Address Handling module
 --
--- 独立档案，因为 phpMyAdmin 遇到第一个错误就会停。
--- 用法：phpMyAdmin → 选 mobile2u → SQL 分页 → 贴上 → Go
+-- Its own file, because phpMyAdmin stops at the first error.
+-- Usage: phpMyAdmin -> select mobile2u -> SQL tab -> paste -> Go
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 会员地址簿
+-- Member address book
 --
--- is_default 用一个「同一会员只能有一笔为 1」的规则维护，
--- 由 PHP 在交易内保证（MySQL 没有部分唯一索引可用）。
+-- is_default follows a "one row per member may be 1" rule, enforced by
+-- PHP inside a transaction (MySQL has no partial unique index).
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `addresses` (
     `id`             INT(11)      NOT NULL AUTO_INCREMENT,
@@ -42,11 +42,11 @@ CREATE TABLE IF NOT EXISTS `addresses` (
 
 
 -- ------------------------------------------------------------
--- 订单记住用了哪一笔地址。
+-- The order remembers which address was used.
 --
--- orders.shipping_address 仍然保留完整文字快照 —— 会员之后改地址
--- 或删掉地址，历史订单上的收件资讯都不能跟着变。
--- 所以这里是 ON DELETE SET NULL，不是 CASCADE。
+-- orders.shipping_address still keeps the full text snapshot: if the member
+-- later edits or deletes the address, past orders must not change.
+-- Hence ON DELETE SET NULL here, not CASCADE.
 -- ------------------------------------------------------------
 ALTER TABLE `orders`
     ADD COLUMN `shipping_address_id` INT(11) NULL DEFAULT NULL;
@@ -59,7 +59,7 @@ ALTER TABLE `orders`
 
 
 -- ------------------------------------------------------------
--- 确认
+-- Verify
 -- ------------------------------------------------------------
 SELECT COUNT(*) AS addresses_table_ready FROM `addresses`;
 SHOW COLUMNS FROM `orders` LIKE 'shipping_address_id';

@@ -58,8 +58,21 @@ $(function () {
     var $devices = $('#webcamDevice');
     var $count   = $('#webcamCountdown');
 
-    function showError(message) {
+    /* $detail is appended as TEXT, never as markup.
+     *
+     * The literal half of these messages is ours and contains <strong>
+     * and <code>, so it has to go through .html(). Anything dynamic --
+     * a browser error string, the current hostname -- goes through
+     * .text() instead. Neither is attacker-controlled today, but
+     * concatenating a runtime value into .html() is the shape of an XSS
+     * even when this particular value cannot carry one. */
+    function showError(message, detail) {
         $error.html(message).removeAttr('hidden');
+
+        if (detail) {
+            $error.append($('<span>').text(' ' + detail));
+        }
+
         $status.attr('hidden', true);
         $live.attr('hidden', true);
         $shot.attr('hidden', true);
@@ -117,6 +130,7 @@ $(function () {
             .catch(function (err) {
                 // The error name tells us exactly what to say.
                 var message;
+                var detail = '';
 
                 switch (err.name) {
                     case 'NotAllowedError':
@@ -139,11 +153,11 @@ $(function () {
                                 + 'Try selecting a different one.';
                         break;
                     default:
-                        message = '<strong>The camera could not be started.</strong> '
-                                + (err.message || err.name);
+                        message = '<strong>The camera could not be started.</strong>';
+                        detail  = err.message || err.name || '';
                 }
 
-                showError(message);
+                showError(message, detail);
             });
     }
 
@@ -186,10 +200,10 @@ $(function () {
             showError(
                 '<strong>The camera needs a secure connection.</strong> '
                 + 'Browsers only allow camera access over HTTPS or on '
-                + '<code>localhost</code>. This page was opened as <code>'
-                + window.location.protocol + '//' + window.location.hostname
-                + '</code>.<br><br>'
-                + 'Open the site as <code>http://localhost/</code> instead and the camera will work.'
+                + '<code>localhost</code>.<br><br>'
+                + 'Open the site as <code>http://localhost/</code> instead and the camera will work.',
+                'This page was opened as '
+                + window.location.protocol + '//' + window.location.hostname + '.'
             );
             return;
         }

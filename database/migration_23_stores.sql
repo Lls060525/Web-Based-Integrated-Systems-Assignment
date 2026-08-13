@@ -1,21 +1,21 @@
 -- ============================================================
--- Mobile2U - 门市据点（Google Maps Integration）
+-- Mobile2U - Store locations (Google Maps Integration)
 --
--- phpMyAdmin 遇到第一个错误就会停，所以这是独立档案。
+-- phpMyAdmin stops at the first error, so this is its own file.
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 门市
+-- Stores
 --
--- latitude / longitude 用 DECIMAL 不用 FLOAT。
--- FLOAT 是二进位浮点数，存 3.139003 会变成 3.1390029999...，
--- 而且比大小时会出现「明明一样却不相等」。座标是要拿来算距离和
--- 比对的资料，不能有这种误差。
+-- latitude / longitude are DECIMAL, not FLOAT.
+-- A binary float cannot hold 3.139003 exactly; it becomes 3.1390029999...,
+-- and equality comparisons start failing on values that look identical.
+-- These numbers feed distance arithmetic, so that drift is not acceptable.
 --
--- DECIMAL(10,7)：整数部分最多 3 位（经度到 180），小数 7 位。
--- 小数第 7 位大约是 1 公分，对门市定位远远够用。
+-- DECIMAL(10,7): up to 3 integer digits (longitude reaches 180), 7 decimals.
+-- The 7th decimal is about a centimetre, far finer than a shop needs.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `stores` (
     `id`             INT(11)        NOT NULL AUTO_INCREMENT,
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS `stores` (
     UNIQUE KEY `uq_store_code` (`code`),
     KEY `idx_store_active` (`is_active`, `sort_order`),
 
-    -- 「找最近的门市」会用範围条件先粗筛，这个索引让它不用整表扫描。
+    -- "Find the nearest store" filters by range first; this index keeps that off a full scan.
     KEY `idx_store_coords` (`latitude`, `longitude`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS `stores` (
 
 
 -- ------------------------------------------------------------
--- 範例门市（真实座标，demo 时地图会有东西可看）
+-- Sample stores with real coordinates, so the map has something on it
 -- ------------------------------------------------------------
 INSERT INTO `stores`
     (`name`, `code`, `address_line1`, `city`, `state`, `postcode`,
@@ -82,7 +82,7 @@ WHERE NOT EXISTS (SELECT 1 FROM `stores` s WHERE s.code = seed.code);
 
 
 -- ------------------------------------------------------------
--- 确认
+-- Verify
 -- ------------------------------------------------------------
 SELECT COUNT(*) AS stores_ready,
        SUM(`latitude` IS NOT NULL) AS with_coordinates

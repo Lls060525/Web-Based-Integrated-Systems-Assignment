@@ -6,11 +6,67 @@
 
 $(function () {
 
-    /* ---------- Collapsible sidebar ---------- */
+    /* ---------- Collapsible sidebar ----------
+     *
+     * Two behaviours from one button, because the sidebar means
+     * different things at different widths:
+     *
+     *   desktop  a column that can be collapsed to reclaim space
+     *            -> .collapsed
+     *   mobile   an overlay that is hidden until asked for
+     *            -> .is-open
+     *
+     * The CSS decides which of the two applies at the current width;
+     * this only has to set both classes and let the media query pick.
+     */
+    var MOBILE_SHELL = 900;
+
+    function isMobileShell() {
+        return window.matchMedia('(max-width: ' + MOBILE_SHELL + 'px)').matches;
+    }
 
     $('#sidebarToggle').on('click', function (e) {
         e.preventDefault();
-        $('#sidebar').toggleClass('collapsed');
+
+        if (isMobileShell()) {
+            $('#sidebar').toggleClass('is-open');
+        } else {
+            $('#sidebar').toggleClass('collapsed');
+        }
+    });
+
+    // Tapping the dimmed backdrop, or any nav link, closes the overlay.
+    $(document).on('click', '.admin-main-content', function (e) {
+        if (isMobileShell() && $('#sidebar').hasClass('is-open')
+            && !$(e.target).closest('#sidebarToggle').length) {
+            $('#sidebar').removeClass('is-open');
+        }
+    });
+
+    $('#sidebar').on('click', '.nav-link', function () {
+        if (isMobileShell()) { $('#sidebar').removeClass('is-open'); }
+    });
+
+    // Escape closes it, which is what a keyboard user will try.
+    $(document).on('keydown', function (e) {
+        if (e.key === 'Escape' && $('#sidebar').hasClass('is-open')) {
+            $('#sidebar').removeClass('is-open');
+        }
+    });
+
+    /* Crossing the breakpoint leaves the wrong class applied: collapse
+     * the desktop column, then rotate the phone, and the overlay is
+     * stuck open. Clearing both on resize keeps the two states from
+     * leaking into each other. */
+    var lastShell = isMobileShell();
+
+    $(window).on('resize', function () {
+        var nowShell = isMobileShell();
+
+        if (nowShell !== lastShell) {
+            $('#sidebar').removeClass('is-open collapsed');
+            lastShell = nowShell;
+        }
     });
 
     /* ---------- Live table search (AJAX + debounce) ----------

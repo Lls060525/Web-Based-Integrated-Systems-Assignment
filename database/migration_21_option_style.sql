@@ -1,31 +1,31 @@
 -- ============================================================
--- Mobile2U - 让规格选择长得像 Apple 的产品配置页
+-- Mobile2U - Make the spec picker behave like a product configurator
 --
--- 先跑 migration_20_spec_options.sql，再跑这个。
+-- Run migration_20_spec_options.sql first, then this one.
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 1. 色票
+-- 1. Colour swatches
 --
--- 存 hex 而不是「颜色名称」，因为「午夜色」「星光色」这种名字
--- 浏览器不认得，而且同一个名字在不同型号是不同的颜色。
--- 留 NULL 就照旧显示成文字按钮 —— 容量、保固这种本来就没有颜色。
+-- Hex is stored rather than a colour name, because "Midnight" and
+-- "Starlight" mean nothing to a browser, and the same name is a different
+-- colour on different models. NULL renders as a text tile, which is right
 -- ------------------------------------------------------------
 ALTER TABLE `product_spec_options`
     ADD COLUMN `swatch_hex` CHAR(7) NULL DEFAULT NULL AFTER `price_delta`;
 
 
 -- ------------------------------------------------------------
--- 2. 这个选项对应哪一张商品照片
+-- 2. Which product photo this choice shows
 --
--- 选蓝色就换成蓝色那张图，这是 Apple 页面上最明显的一个行为。
--- 直接指到 product_photos，不另外存档名，这样照片被换掉或删掉时
--- 不会留下指向不存在档案的死连结。
+-- Choosing blue switches to the blue photo, the most recognisable behaviour
+-- on such a page. It points at product_photos rather than storing a filename,
+-- so replacing or deleting a photo cannot leave a dead reference.
 --
--- ON DELETE SET NULL：照片被删掉时，选项本身要留着（客人还是买得到
--- 蓝色），只是不再换图而已。
+-- ON DELETE SET NULL: if the photo goes, the choice itself stays (blue is
+-- still buyable), it just stops changing the picture.
 -- ------------------------------------------------------------
 ALTER TABLE `product_spec_options`
     ADD COLUMN `photo_id` INT(11) NULL DEFAULT NULL AFTER `swatch_hex`;
@@ -40,21 +40,21 @@ ALTER TABLE `product_spec_options`
 
 
 -- ------------------------------------------------------------
--- 3. 这个选项现在还买不买得到
+-- 3. Whether this choice is currently available
 --
--- 不是删掉，而是标成缺货。删掉的话客人下次就找不到这个颜色了，
--- 而且已经在购物车里的那一行会变成无效；标缺货则是灰掉、不能选，
--- 补货后一个勾就回来。
+-- Marked sold out rather than deleted. Deleting would make the colour vanish
+-- for customers and invalidate any cart line holding it. This greys it out
+-- and it comes back with one click when restocked.
 --
--- 这不是完整的「颜色 x 容量」库存矩阵 —— 那需要另一张组合表。
--- 这里是每个选项各自的开关，够用而且诚实。
+-- This is NOT a full colour-by-storage stock matrix; that needs a separate
+-- combination table. This is a per-choice switch: enough, and honest about it.
 -- ------------------------------------------------------------
 ALTER TABLE `product_spec_options`
     ADD COLUMN `is_available` TINYINT(1) NOT NULL DEFAULT 1 AFTER `is_default`;
 
 
 -- ------------------------------------------------------------
--- 4. 确认
+-- 4. Verify
 -- ------------------------------------------------------------
 SELECT COUNT(*) AS options_ready,
        SUM(`is_available`) AS available_now

@@ -1,24 +1,24 @@
 -- ============================================================
 -- Mobile2U - Temporary Login Blocking module
 --
--- 独立档案，因为 phpMyAdmin 遇到第一个错误就会停。
--- 用法：phpMyAdmin → 选 mobile2u → SQL 分页 → 贴上 → Go
+-- Its own file, because phpMyAdmin stops at the first error.
+-- Usage: phpMyAdmin -> select mobile2u -> SQL tab -> paste -> Go
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 登入尝试纪录
+-- Login attempts
 --
--- 成功和失败都记录，理由有二：
---   1. 成功登入要用来清掉该帐号先前的失败计数
---   2. 管理员看得到「这个 IP 试了 20 次才成功」这种可疑模式
+-- Both successes and failures are recorded, for two reasons:
+--   1. A success is what clears the earlier failure count for that account
+--   2. An admin can see a pattern like "this IP tried 20 times before succeeding"
 --
--- email 不设外键，因为要连「不存在的帐号」也一起记。
--- 如果只记真实存在的 email，攻击者就能靠「有没有被锁」
--- 反推哪些 email 有注册 —— 那就变成帐号列举的破口。
+-- email has no foreign key, because attempts against accounts that do not
+-- exist must be recorded too. Recording only real addresses would let an
+-- attacker infer which addresses are registered from whether a lock happens.
 --
--- ip_address 用 VARCHAR(45)：IPv6 最长 45 个字元。
+-- ip_address is VARCHAR(45): the longest IPv6 form is 45 characters.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `login_attempts` (
     `id`           INT(11)      NOT NULL AUTO_INCREMENT,
@@ -38,6 +38,6 @@ CREATE TABLE IF NOT EXISTS `login_attempts` (
 
 
 -- ------------------------------------------------------------
--- 确认
+-- Verify
 -- ------------------------------------------------------------
 SELECT COUNT(*) AS login_attempts_table_ready FROM `login_attempts`;

@@ -1,26 +1,26 @@
 -- ============================================================
 -- Mobile2U - Product Specifications module
 --
--- 独立档案，phpMyAdmin 遇到第一个错误就会停。
--- 用法：phpMyAdmin → 选 mobile2u → SQL → 贴上 → Go
+-- Its own file, because phpMyAdmin stops at the first error.
+-- Usage: phpMyAdmin -> select mobile2u -> SQL tab -> paste -> Go
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 1. 规格「栏位定义」
+-- 1. Specification attribute definitions
 --
--- 为什么不是直接在 products 加栏位（RAM、螢幕、电池...）：
---   手机要 RAM / 储存 / 螢幕 / 电池，
---   传输线要 长度 / 瓦数 / 接头，
---   手錶要 錶带尺寸 / 防水等级。
--- 塞在同一张表 → 大部分栏位永远是 NULL，而且每加一个规格
--- 就要 ALTER TABLE 一次（正式环境上锁表）。
+-- Why not just add columns to products (RAM, screen, battery...):
+--   a phone needs RAM / storage / screen / battery,
+--   a cable needs length / wattage / connector,
+--   a watch needs strap size / water rating.
+-- One wide table means most columns are NULL for most rows, and every new
+-- spec is an ALTER TABLE, which locks the table in production.
 --
--- 所以规格是「资料」不是「结构」：这张表定义有哪些规格，
--- product_specs 存每个商品的值。这就是 EAV 模型。
+-- So specs are DATA, not schema. This table defines which specs exist;
+-- product_specs holds the value per product. That shape is called EAV.
 --
--- category_id 可以是 NULL = 所有分类通用（例如「保固」）。
+-- category_id may be NULL, meaning it applies to every category (Warranty).
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `spec_attributes` (
     `id`            INT(11)      NOT NULL AUTO_INCREMENT,
@@ -49,23 +49,23 @@ CREATE TABLE IF NOT EXISTS `spec_attributes` (
 
 
 -- ------------------------------------------------------------
--- 2. 每个商品的规格值
+-- 2. The value of each spec for each product
 --
--- 关键设计：同一个值存两份。
+-- Key design: the same value is stored twice.
 --
---   value_text   一律填，负责显示（"8 GB"、"AMOLED"、"Yes"）
---   value_number 只有 number 型别才填，负责筛选和排序
+--   value_text   always filled, used for display ("8", "AMOLED", "Yes")
+--   value_number only for numeric types, used for filtering and sorting
 --
--- 为什么要两份：
---   如果只存 VARCHAR，"RAM >= 8" 这种查询要写成
+-- Why both:
+--   With only a VARCHAR, "RAM >= 8" has to be written as
 --       WHERE CAST(value_text AS DECIMAL) >= 8
---   CAST 之后索引就用不到了，MySQL 只能整表扫描；而且
---   字串比大小时 "12" < "8"（逐字元比），答案根本是错的。
---   多存一个 DECIMAL 栏位，range 查询就能吃 idx_spec_number。
+--   CAST(value_text AS DECIMAL) >= 8, which makes the index unusable, and
+--   worse, as strings "12" < "8" character by character, so it is wrong.
+--   A second DECIMAL column lets range queries use idx_spec_number.
 --
---   这是刻意的反正规化：多一份重复资料，换掉一次全表扫描。
---   两个栏位永远由 lib/spec.php 的同一个函式一起写入，
---   不会有只更新其中一个的情况。
+--   A deliberate denormalisation: one duplicated value in exchange for a
+--   correct answer and a usable index. Both columns are always written by
+--   the same single function in lib/spec.php, so they cannot drift apart.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `product_specs` (
     `id`           INT(11)        NOT NULL AUTO_INCREMENT,
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS `product_specs` (
 
     PRIMARY KEY (`id`),
 
-    -- 一个商品的同一个规格只能有一个值。
+    -- One value per product per attribute.
     UNIQUE KEY `uq_product_attribute` (`product_id`, `attribute_id`),
 
     KEY `idx_spec_value_product` (`product_id`),
@@ -98,11 +98,11 @@ CREATE TABLE IF NOT EXISTS `product_specs` (
 
 
 -- ------------------------------------------------------------
--- 3. 範例规格栏位
+-- 3. Sample attributes
 --
--- category_id 用子查询找分类名称。找不到就是 NULL，
--- 也就是「所有分类通用」—— 所以就算你的分类名称跟这里不同，
--- 这段也不会失败，只是变成通用规格而已。
+-- category_id is looked up by category name. If the name is not found the
+-- subquery yields NULL, meaning "applies to every category", so this still
+-- succeeds even if your categories are named differently.
 -- ------------------------------------------------------------
 INSERT INTO `spec_attributes`
     (`category_id`, `name`, `code`, `data_type`, `unit`, `options`, `is_filterable`, `is_comparable`, `sort_order`)
@@ -141,7 +141,7 @@ WHERE NOT EXISTS (
 
 
 -- ------------------------------------------------------------
--- 4. 确认
+-- 4. Verify
 -- ------------------------------------------------------------
 SELECT COUNT(*) AS spec_attributes_ready FROM `spec_attributes`;
 SELECT COUNT(*) AS product_specs_ready   FROM `product_specs`;

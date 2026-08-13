@@ -1,21 +1,21 @@
 -- ============================================================
 -- Mobile2U - Wishlist / Favorites module
 --
--- 独立档案，因为 phpMyAdmin 遇到第一个错误就会停。
--- 用法：phpMyAdmin → 选 mobile2u → SQL 分页 → 贴上 → Go
+-- Its own file, because phpMyAdmin stops at the first error.
+-- Usage: phpMyAdmin -> select mobile2u -> SQL tab -> paste -> Go
 -- ============================================================
 
 USE `mobile2u`;
 
 -- ------------------------------------------------------------
--- 会员收藏清单
+-- Member wishlist
 --
--- (user_id, product_id) 设成 UNIQUE：同一个人不可能收藏同一件
--- 商品两次。这条约束让「重复点击爱心」在资料库层就被挡下，
--- 不必靠 PHP 先查再插那种会有 race condition 的写法。
+-- (user_id, product_id) is UNIQUE: one person cannot save the same
+-- product twice. The constraint blocks a double-clicked heart at the
+-- database level, instead of a check-then-insert in PHP that races.
 --
--- 两边都是 CASCADE：会员删了或商品删了，收藏纪录跟着消失，
--- 因为收藏本身没有历史价值（不像订单要留快照）。
+-- CASCADE on both sides: if the member or the product goes, the saved
+-- entry goes too. A wishlist has no historical value, unlike an order.
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `wishlist` (
     `id`         INT(11)  NOT NULL AUTO_INCREMENT,
@@ -41,6 +41,6 @@ CREATE TABLE IF NOT EXISTS `wishlist` (
 
 
 -- ------------------------------------------------------------
--- 确认
+-- Verify
 -- ------------------------------------------------------------
 SELECT COUNT(*) AS wishlist_table_ready FROM `wishlist`;

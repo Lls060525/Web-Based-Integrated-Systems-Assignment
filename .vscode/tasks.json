@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start Mobile2U (with router)",
+            "detail": "php -S localhost:8001 router.php  --  router.php restores the .htaccess rules, which PHP's built-in server ignores entirely.",
+            "type": "shell",
+            "command": "php",
+            "args": ["-S", "localhost:8001", "router.php"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            },
+            "group": { "kind": "build", "isDefault": true }
+        }
+    ]
+}

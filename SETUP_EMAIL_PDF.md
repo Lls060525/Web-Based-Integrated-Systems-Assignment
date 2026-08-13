@@ -1,73 +1,79 @@
-# 让 E-Receipt 真的寄出 PDF
+# Making the E-Receipt really send a PDF
 
-目前的状态：`MAIL_MODE = 'dev'`，而且 `vendor/` 里只有 Stripe。
-所以现在收据只会写进 `storage/mail.log`，也没有 PDF。
+Out of the box `MAIL_MODE = 'dev'` and `vendor/` contains only Stripe, so
+receipts are written to `storage/mail.log` and no PDF is produced.
 
-下面四步做完就会真的寄到 Gmail 收件匣。
+The steps below make it arrive in a real inbox.
 
 ---
 
-## 第 1 步：装 Composer（如果还没装）
+## Step 1: Install Composer (if you have not already)
 
-`vendor/` 里已经有 Stripe，代表你之前跑过 Composer，那这步可以跳过。
-
-确认一下：开 CMD，输入
+If `vendor/` already contains Stripe you have run Composer before and can skip
+this. To check, open CMD and run:
 
 ```
 composer -V
 ```
 
-有版本号就是装好了。如果显示「不是内部或外部命令」，去 <https://getcomposer.org/Composer-Setup.exe>
-下载安装（一路 Next，它会自动侦测 XAMPP 的 php.exe）。装完**关掉 CMD 重开**。
+A version number means it is installed. If you get "not recognised as an internal
+or external command", download it from
+<https://getcomposer.org/Composer-Setup.exe> and accept the defaults — the
+installer detects XAMPP's `php.exe` on its own. **Close and reopen CMD**
+afterwards.
 
 ---
 
-## 第 2 步：装 Dompdf 和 PHPMailer
+## Step 2: Install Dompdf and PHPMailer
 
-开 CMD，切到专案资料夹：
+Open CMD and change to the project folder:
 
 ```
 cd /d D:\Web-Based-Integrated-Systems-Assignment
 composer require dompdf/dompdf phpmailer/phpmailer gregwar/captcha
 ```
 
-跑完 `vendor/` 里应该多出 `dompdf/` 和 `phpmailer/` 两个资料夹。
+Afterwards `vendor/` should contain `dompdf/` and `phpmailer/`.
 
-`composer.json` 已经帮你写好依赖了，所以其实直接跑 `composer install` 也可以。
+The dependencies are already listed in `composer.json`, so plain
+`composer install` works too.
 
-> **装不上？** 常见原因是 PHP 的 openssl 没开。
-> 开 `C:\xampp\php\php.ini`，找到 `;extension=openssl`，把前面的分号删掉，
-> 存档后重启 Apache。
-
----
-
-## 第 3 步：确认 Gmail App Password
-
-`lib/config.php` 里的 `SMTP_PASS` 必须是 **App Password**，不是你平常登入的密码。
-
-产生方式：
-
-1. 到 <https://myaccount.google.com/security>
-2. 先开启 **两步骤验证**（没开就没有 App Password 这个选项）
-3. 搜寻「应用程式密码 / App passwords」
-4. 建立一个，名字随便打（例如 `Mobile2U`）
-5. 会给你 16 个字元，例如 `abcd efgh ijkl mnop`，整串贴进 `SMTP_PASS`（空格可留可不留）
-
-> **注意：学校信箱可能不行。** 你现在填的是 `@student.tarc.edu.my`，
-> 这是 Google Workspace 帐号，很多学校的管理员会**停用 App Password**。
-> 如果第 4 步测试一直失败，换一个个人 Gmail 帐号来寄，收件人还是可以填任何信箱。
+> **Fails to install?** The usual cause is PHP's openssl extension being off.
+> Open `C:\xampp\php\php.ini`, find `;extension=openssl`, remove the leading
+> semicolon, save, and restart Apache.
 
 ---
 
-## 第 4 步：切换成真的寄信
+## Step 3: Get a Gmail App Password
 
-开 `lib/config.php`，把这行：
+`SMTP_PASS` in `lib/config.php` must be an **App Password**, not the password you
+log in with.
+
+To create one:
+
+1. Go to <https://myaccount.google.com/security>
+2. Turn on **2-Step Verification** first — without it there is no App Password option
+3. Search for **App passwords**
+4. Create one with any name, for example `Mobile2U`
+5. You get 16 characters such as `abcd efgh ijkl mnop`. Paste the whole thing
+   into `SMTP_PASS`; the spaces do not matter
+
+> **A university address may not work.** A `@student.tarc.edu.my` address is a
+> Google Workspace account, and many institutions disable App Passwords for
+> them. If step 6 keeps failing, send from a personal Gmail account instead —
+> the recipient can still be any address.
+
+---
+
+## Step 4: Switch on real sending
+
+In `lib/config.php`, change:
 
 ```php
 define('MAIL_MODE', 'dev');
 ```
 
-改成：
+to:
 
 ```php
 define('MAIL_MODE', 'prod');
@@ -75,82 +81,92 @@ define('MAIL_MODE', 'prod');
 
 ---
 
-## 第 5 步：跑 E-Receipt 的 SQL
+## Step 5: Run the E-Receipt SQL
 
-在 phpMyAdmin 选 `mobile2u` → SQL 分页 → 贴上 **`database/migration_07_ereceipt.sql`** → Go。
+In phpMyAdmin, select `mobile2u` -> SQL tab -> paste
+**`database/migration_07_ereceipt.sql`** -> Go.
 
-> 不要重跑整个 `migration_password_reset.sql`。
-> phpMyAdmin 遇到第一个错误就停，你之前已经跑过前面几段，
-> 重跑会卡在「Duplicate column name」，第 7 段永远执行不到。
-
----
-
-## 第 6 步：验证
-
-登入 admin，左侧选单点 **Mail & PDF**（`/admin/mail_test.php`）。
-
-这一页会逐项检查：
-
-| 检查项 | 没过的话怎么办 |
-|--------|---------------|
-| Composer autoloader loaded | 跑 `composer install` |
-| Dompdf installed | 跑 `composer require dompdf/dompdf` |
-| PHPMailer installed | 跑 `composer require phpmailer/phpmailer` |
-| PHP openssl extension | 改 php.ini 后重启 Apache |
-| MAIL_MODE is "prod" | 改 `lib/config.php` |
-| From address matches SMTP account | 已自动处理 |
-| storage/receipts writable | 给资料夹写入权限 |
-| Receipt columns exist | 跑 migration SQL |
-
-全绿之后，在同一页最下面填一个收件信箱，按 **Send Test Message**。
-它会把最新一张订单的 PDF 当附件寄出去 —— 跟真正的收据走完全一样的路径。
-
-收到了，就代表整条链路通了。
+> Do not re-run the whole `migration_password_reset.sql`. phpMyAdmin stops at the
+> first error, and since the earlier sections have already been applied it would
+> halt on "Duplicate column name" and never reach section 7.
 
 ---
 
-## PDF 下载在哪里
+## Step 6: Verify
 
-装好 Dompdf 之后，这三个地方会出现 **Download PDF** 按钮：
+Sign in as an admin and open **Mail & PDF** in the sidebar
+(`/admin/mail_test.php`). That page checks each part of the chain:
 
-- 会员：订单详情页 `/order_detail.php?id=N` 右侧
-- 会员：收据页 `/receipt.php?id=N` 顶部工具列
-- 管理员：订单详情页 `/admin/order_detail.php?id=N` 右侧
+| Check | What to do if it fails |
+|-------|------------------------|
+| Composer autoloader loaded | run `composer install` |
+| Dompdf installed | run `composer require dompdf/dompdf` |
+| PHPMailer installed | run `composer require phpmailer/phpmailer` |
+| PHP openssl extension | edit php.ini, restart Apache |
+| MAIL_MODE is "prod" | edit `lib/config.php` |
+| From address matches SMTP account | handled automatically |
+| storage/receipts writable | grant write permission on the folder |
+| Receipt columns exist | run the migration SQL |
 
-按下去会直接下载 `Receipt-MU-2026-000042.pdf`。
+Once everything is green, enter a recipient at the bottom of the same page and
+press **Send Test Message**. It attaches the PDF of the most recent order and
+goes through exactly the same code path as a real receipt.
 
-寄出去的 PDF 会同时存一份在 `storage/receipts/`，
-这个资料夹用 `.htaccess` 挡住了直接存取，只能透过 `receipt.php` 验证身分后才拿得到。
-
-**没装 Dompdf 也能交作业**：按钮不会出现，但收据页还在，
-按 **Print** 选「另存为 PDF」一样有 PDF，只是不是伺服器产生的。
-
----
-
-## Demo 当天的建议
-
-真的寄信依赖网路和 Google 的服务，示范时挂掉会很难看。两个作法：
-
-**保险作法** — demo 前一晚录一段影片或截图，证明信真的收到了，
-当天把 `MAIL_MODE` 切回 `dev`，现场展示 `storage/mail.log` 加上 PDF 下载。
-PDF 是本地产生的，绝对不会失败。
-
-**正常作法** — 保持 `prod`，但事先在同一个网路环境测过一次。
-
-两种都能拿到分数，第二种比较好看，第一种比较稳。
+If it arrives, the whole chain works.
 
 ---
 
-## ⚠️ 交作业前一定要做
+## Where the PDF download appears
 
-`lib/config.php` 现在同时存着：
+Once Dompdf is installed, a **Download PDF** button appears in three places:
 
-- 你的 **Stripe secret key**
-- 你的 **Gmail App Password**
+- Member: order detail page `/order_detail.php?id=N`, right-hand column
+- Member: receipt page `/receipt.php?id=N`, top toolbar
+- Admin: order detail page `/admin/order_detail.php?id=N`, right-hand column
 
-**App Password 等于一把可以寄信的钥匙**，交出去的 ZIP 里带着它，
-任何拿到档案的人都能用你的名义寄信。交之前请务必：
+It downloads as `Receipt-MU-2026-000042.pdf`.
 
-1. 到 Google 帐号安全性页面**撤销**那个 App Password（几秒钟的事）
-2. 把 `SMTP_PASS` 和 `STRIPE_SECRET_KEY` 换成占位字串
-3. 如果这个专案推过 GitHub，**历史 commit 里也会有**，记得也要撤销
+A copy of every emailed PDF is also written to `storage/receipts/`. That folder
+is blocked from direct access by its `.htaccess`, so the files are only reachable
+through `receipt.php`, which checks who is asking first.
+
+**The assignment can still be submitted without Dompdf.** The button simply does
+not appear; the receipt page is still there, and **Print -> Save as PDF** produces
+a PDF, just not a server-generated one.
+
+---
+
+## Advice for the demo
+
+Real sending depends on the network and on Google, and it is embarrassing when it
+fails in front of an audience. Two approaches:
+
+**The safe one** — record a video or take screenshots the night before proving
+the mail arrives, then switch `MAIL_MODE` back to `dev` for the demo and show
+`storage/mail.log` plus the PDF download. The PDF is generated locally and cannot
+fail.
+
+**The normal one** — leave it on `prod`, but test once beforehand on the same
+network you will present from.
+
+Both earn the marks. The second looks better; the first is safer.
+
+---
+
+## Before submitting
+
+`lib/config.php` holds real credentials:
+
+- your **Stripe secret key**
+- your **Gmail App Password**
+
+**An App Password is a working key for sending mail as you.** Anyone who receives
+the ZIP can use it. Before handing it in:
+
+1. **Revoke** that App Password on your Google account security page — it takes seconds
+2. Replace `SMTP_PASS` and `STRIPE_SECRET_KEY` with placeholder strings
+3. If this project was ever pushed to GitHub, **the old commits still contain
+   them**, so revoking is not optional
+
+`lib/config.example.php` is the template to hand in. `lib/config.php` is listed in
+`.gitignore` so it is not committed again.

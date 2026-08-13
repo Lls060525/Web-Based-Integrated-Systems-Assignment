@@ -13,7 +13,7 @@ body {
 
 .admin-sidebar {
     width: 250px;
-    background-color: #343a40; /* 深色侧边栏 */
+    background-color: #343a40; /* dark sidebar */
     color: #fff;
     transition: margin 0.3s ease;
     flex-shrink: 0;
@@ -30,7 +30,7 @@ body {
     font-weight: bold;
     text-align: center;
     border-bottom: 1px solid #4f5962;
-    color: #F05123; /* 你的品牌色 */
+    color: #F05123; /* brand colour */
     text-decoration: none;
     display: block;
 }
@@ -294,3 +294,50 @@ body {
 /* Collapsed sidebar hides the labels, keeps the icons */
 .admin-sidebar.collapsed .nav-label,
 .admin-sidebar.collapsed .sidebar-brand { display: none; }
+
+/* ============================================================
+   Responsive admin shell
+   ============================================================ */
+
+@media (max-width: 900px) {
+    /* On a phone the sidebar is an overlay, not a column.
+     *
+     * As a flex child it was taking 250px of a 360px screen and leaving
+     * the content 110px. Taking it out of the flow means the content
+     * gets the full width and the sidebar slides over it when asked
+     * for. .collapsed already moves it off-screen, so the desktop
+     * toggle keeps working unchanged -- only the default flips. */
+    .admin-sidebar {
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        overflow-y: auto;
+        box-shadow: 2px 0 12px rgba(0, 0, 0, .25);
+    }
+
+    /* Starts hidden. The toggle button in the topbar reveals it. */
+    .admin-sidebar:not(.is-open) {
+        margin-left: -250px;
+        box-shadow: none;
+    }
+
+    .admin-main-content { width: 100%; }
+
+    /* Dimmed backdrop, so it is obvious the sidebar is a layer and
+       tapping anywhere else closes it. */
+    .admin-sidebar.is-open + .admin-main-content::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, .45);
+        z-index: 999;
+    }
+
+    .admin-topbar { position: sticky; top: 0; z-index: 900; }
+}
+
+@media (max-width: 600px) {
+    .admin-topbar { padding: 10px 12px; }
+    .topbar-name { display: none; }
+}
