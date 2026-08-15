@@ -43,9 +43,15 @@ if (is_post()) {
     redirect('/admin/login_attempts.php');
 }
 
-$q       = get('q');
-$locked  = locked_accounts();
-$recent  = recent_login_attempts(100, $q);
+$q      = get('q');
+$locked = locked_accounts();
+
+// Paginated rather than a flat "most recent 100". This table grows on
+// every sign-in attempt, so a fixed cap meant older entries could never
+// be reached at all -- an audit log you cannot page back through is not
+// much of an audit log.
+$pager  = paginate(count_login_attempts($q), 25);
+$recent = recent_login_attempts($pager['per_page'], $q, $pager['offset']);
 
 $stats = db_one(
     'SELECT
@@ -212,6 +218,8 @@ include __DIR__ . '/../includes/admin_header.php';
                 </tbody>
             </table>
         </div>
+
+        <?php render_pager($pager); ?>
     </div>
 </div>
 

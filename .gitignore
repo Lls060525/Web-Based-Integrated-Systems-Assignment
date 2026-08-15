@@ -19,6 +19,10 @@ lib/config.php
 # including password hashes.
 /database/mobile2u.sql
 
+# Local tooling downloaded into the project folder, not part of the code.
+*.exe
+cloudflared.exe
+
 # Editor and OS noise.
 # tasks.json is deliberately NOT ignored: it carries no secrets and it is
 # how a teammate starts the server with router.php rather than without it.

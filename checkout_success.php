@@ -79,6 +79,12 @@ try {
     }
 
     $subtotal = 0.0;
+
+    // One query for every line's options, rather than one per attribute
+    // per line. This runs inside the order transaction, so keeping the
+    // round trips down keeps the lock window short.
+    spec_prefetch_options(array_column($items, 'product_id'));
+
     foreach ($items as $index => $item) {
         // Priced once, here, and then written into order_items. From this
         // point the chosen options are a snapshot: renaming or deleting an

@@ -361,9 +361,11 @@ body {
 }
 
 .profile-sidebar {
-  /* 290 = the old 250 content + 20 padding each side, so the
-   * rendered width is unchanged now that border-box applies. */
+  /* NOTE: on admin pages admin_sidebar.css overrides this with its own
+   * .profile-sidebar, which is a different component sharing the name.
+   * This value governs the storefront profile page only. */
   width: 290px;
+  min-width: 240px;   /* was a separate .profile-sidebar rule 1900 lines below */
   background: var(--white);
   border-radius: 6px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.05);
@@ -462,7 +464,62 @@ body {
   margin-top: 0; 
 }
 
+/* --- Read-only information panels --- */
+/* Named .info-* and not .detail-* on purpose: a .detail-list already
+   exists further down this file for the order pages, and its
+   `.detail-list dt` rules are more specific than a bare class, so they
+   would have silently won here. Two different things wanted the same
+   name; this one changed.
+
+   A label and a value, not a form control. The value wraps instead of
+   being clipped, and it can be selected and copied -- which is the whole
+   point of showing a member's email address to an admin. */
+.info-list {
+  margin: 0;
+  padding: 24px 30px;
+}
+.info-row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 8px 20px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.info-row:last-child { border-bottom: 0; }
+
+.info-label {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.info-value {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-main);
+  /* minmax(0,1fr) above plus this is what lets a long address wrap
+     rather than push the grid wider than its card. */
+  overflow-wrap: anywhere;
+}
+.info-value.is-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+}
+
+@media (max-width: 600px) {
+  /* Two columns in 320px leaves nothing for either. Stack them. */
+  .info-list { padding: 18px 20px; }
+  .info-row  { grid-template-columns: 1fr; gap: 4px; padding: 10px 0; }
+}
+
 /* --- Readonly Input Style (Light Version) --- */
+/* Still used for the genuinely short system values -- "Administrator",
+   "Active", "Malaysia" -- where a fixed-width badge reads well. It is
+   NOT for anything that can be long: the 120px below is what clipped
+   "ting@gmail.com" to "ting@gmail.cor" on the member detail page, and
+   pointer-events: none meant it could not even be selected to check.
+   Long values belong in a .detail-list instead. */
 .form-standard input[readonly] {
   background-color: #f1f3f5;      /* light grey background */
   color: #495057;                 /* dark grey text */
@@ -483,6 +540,17 @@ body {
 .form-standard input[readonly]:focus {
   border-color: var(--border);    /* no orange focus highlight, unlike a real input */
   outline: none;
+}
+
+/* The store form's latitude and longitude are readonly -- they are filled
+   in by parsing a pasted Google Maps link -- but a coordinate needs room
+   and needs to be copyable, so they opt out of the badge treatment. */
+.form-standard input[readonly]#latitude,
+.form-standard input[readonly]#longitude {
+  width: 100% !important;
+  text-align: left;
+  pointer-events: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 /* --- Toast Notifications (Modern UX) --- */
@@ -702,11 +770,119 @@ body {
   border-color: var(--primary);
 }
 
-.cart-table th, .cart-table td {
-  vertical-align: middle; /* keeps the thumbnail and the text vertically centred */
+.cart-table {
+  /* Fixed layout is the whole point here.
+   *
+   * With the default `auto`, the browser sizes every column from its
+   * content. Raising a quantity from 1 to 2 turns "RM 999.00" into
+   * "RM 1,998.00" -- two characters wider -- and that is enough to make
+   * EVERY column renegotiate its width. The product name reflows, the
+   * quantity box slides sideways, and the whole table twitches over one
+   * digit.
+   *
+   * Fixed layout reads the widths below once and never revisits them,
+   * so the number can grow to any length without moving anything. */
+  table-layout: fixed;
+  width: 100%;
 }
 
-@media(max-width: 850px) {
+/* Belt and braces: once the rows become blocks the fixed algorithm is
+   meaningless anyway, but saying so explicitly keeps the two layouts
+   from ever arguing. */
+@media (max-width: 780px) {
+  .cart-table { table-layout: auto; }
+}
+
+/* Column widths.
+ *
+ * Sized through <colgroup> in cart.php, not with :nth-child. The header
+ * row's first cell is colspan="2", so it has five cells over six
+ * columns -- an :nth-child rule sizes the header CELLS and every
+ * heading ends up over the wrong column. A <col> addresses the real
+ * column, which is what needs sizing.
+ *
+ * Only the product column is flexible; it is the one whose content can
+ * wrap. The rest are fixed at their widest realistic content so that a
+ * number growing a digit cannot push anything sideways.
+ *
+ * Scoped to 601px and up: below that the responsive block turns every
+ * cell into a full-width block and these widths would fight it. */
+@media (min-width: 781px) {
+  .cart-table .col-thumb    { width: 64px; }
+  .cart-table .col-product  { width: auto; }
+  .cart-table .col-unit     { width: 112px; }
+  .cart-table .col-qty      { width: 92px; }
+  .cart-table .col-subtotal { width: 132px; }
+  .cart-table .col-remove   { width: 100px; }
+}
+
+.cart-table th, .cart-table td {
+  vertical-align: middle; /* keeps the thumbnail and the text vertically centred */
+  padding: 14px 10px;
+}
+
+/* No padding on the outer edges, so the first and last columns line up
+   with the card's own padding instead of sitting inset from it. */
+.cart-table th:first-child, .cart-table td:first-child { padding-left: 0; }
+.cart-table th:last-child,  .cart-table td:last-child  { padding-right: 0; }
+
+/* Headings left-aligned to match the data underneath. A <th> is centred
+   by default, which is why every heading sat off to one side of its
+   column instead of over the values it labels.
+
+   This block must stay AFTER the shared `padding` shorthand above.
+   Equal specificity means source order decides, and with the shorthand
+   second its padding-bottom would be silently overwritten. */
+.cart-table th {
+  text-align: left;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* "Product" sits above the name, not above the thumbnail. */
+.cart-table thead th[colspan="2"] { padding-left: 64px; }
+
+/* A price must never wrap. "RM 32,994.00" breaking into two lines makes
+   the row taller than its neighbours, which is a bigger jump than the
+   one this whole change set out to remove. */
+.cart-table .cell-price,
+.cart-table td[data-label="Unit price"] { white-space: nowrap; }
+
+/* Fixed layout will not let a long product name widen the column, so it
+   has to be allowed to wrap instead of overflowing. */
+.cart-table .cell-product { word-break: break-word; }
+
+/* Tabular figures: every digit occupies the same width, so 1 and 8 are
+   interchangeable and a total does not shuffle sideways as it changes.
+   Without this the text still shifts slightly inside its cell even
+   though the cell itself now holds still. */
+.cart-table .cell-price,
+.cart-table td[data-label="Unit price"],
+.summary-row strong,
+.cart-summary .price {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* While a quantity is being saved. Deliberately only opacity -- no
+   border, no padding, no font change, because anything that alters the
+   box would reintroduce exactly the movement this is meant to remove. */
+.cart-table tr.is-updating .cell-price {
+  opacity: 0.45;
+  transition: opacity 0.12s ease;
+}
+
+/* The summary stacks well before it used to.
+ *
+ * A 320px sidebar beside a six-column table needs roughly 1100px before
+ * the table has room left for a product name. At the old 850px the two
+ * sat side by side in about 430px of space and the columns overflowed
+ * their card. */
+@media (max-width: 1100px) {
   .cart-layout { flex-direction: column; }
   .cart-summary-section { width: 100%; position: static; }
 }
@@ -1025,6 +1201,65 @@ textarea.form-control { resize: vertical; }
 }
 .page-link:hover { border-color: var(--primary); color: var(--primary); }
 .page-link.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+
+/* Admin pager. Same links as the catalogue, plus a row count, and left
+   aligned because it sits under a table rather than under a grid.
+   :empty covers the case where a listing has no rows at all -- the
+   container is still emitted so the live search has somewhere to write,
+   but it should not leave a gap on screen. */
+/* The pager appears in two different containers, and they need opposite
+   things. Six listings put it inside a .card, directly under the table;
+   admin/reviews.php and the member's orders.php put it on the page under
+   a stack of cards. */
+.admin-pagination {
+  justify-content: flex-start;
+  align-items: center;
+
+  /* Standalone: it has to draw its own separator and stand clear of
+     whatever is above it. */
+  margin: 20px 0 0;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+/* Inside a card the card is the frame, so the rules invert.
+ *
+ * PADDING, NOT MARGIN. .card has no padding of its own and sets
+ * overflow: hidden, because the admin tables are meant to run edge to
+ * edge inside it. A margin under the pager sits OUTSIDE the pager's box,
+ * so the card clipped it and the page buttons were cut off along the
+ * bottom edge -- which is exactly what went wrong.
+ *
+ * 15px left and right is not arbitrary: it matches the .admin-table cell
+ * padding, so "Showing 1 to 25 of 45" lines up with the first column of
+ * the table above rather than hanging off to the left.
+ *
+ * No border either: the table's last row already draws a border-bottom,
+ * and a second line 16px below it reads as a mistake. */
+.card > .admin-pagination {
+  margin: 0;
+  padding: 16px 15px 18px;
+  border-top: 0;
+}
+
+.admin-pagination:empty { display: none; }
+
+.pager-summary {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-right: auto;   /* pushes the page links to the right edge */
+  align-self: center;
+}
+.page-gap { padding: 7px 4px; color: var(--text-muted); font-size: 14px; }
+
+@media (max-width: 600px) {
+  /* On a phone the summary needs its own line, otherwise "Showing 26 to
+     50 of 137" and eight page links fight over the same 320px. */
+  .admin-pagination { justify-content: center; }
+  .card > .admin-pagination { padding: 14px 12px 16px; }
+  .pager-summary { margin-right: 0; width: 100%; text-align: center; margin-bottom: 8px; }
+  .page-link { padding: 8px 11px; }
+}
 
 /* ---------- Product detail ---------- */
 .product-detail-title { margin-top: 0; font-size: 28px; }
@@ -2056,8 +2291,6 @@ label.check-label {
    width for the stacked layout to read properly. */
 .profile-avatar-section .dropzone { padding: 16px 12px; }
 .profile-avatar-section .upload-form { width: 100%; }
-.profile-sidebar { min-width: 240px; }
-
 /* ---------- Product photo gallery (storefront) ---------- */
 .gallery { }
 .gallery-stage {
@@ -3374,6 +3607,11 @@ button.is-busy::after {
   .table-responsive .admin-table,
   .table-responsive .batch-table { min-width: 720px; }
 
+  /* A dashboard summary is the exception. Three values behind a
+     sideways swipe is worse than three narrower columns, so these opt
+     out of the floor and fit instead. */
+  .table-responsive .summary-table { min-width: 0; }
+
   .table-responsive .compare-table { min-width: 560px; }
 
   /* A hint that there is more to the right, since a touch device shows
@@ -3532,7 +3770,7 @@ button.is-busy::after {
  * still accessible to a screen reader in table order, and it needs no
  * duplicate mobile-only markup to drift out of sync.
  */
-@media (max-width: 600px) {
+@media (max-width: 780px) {
   .cart-table,
   .cart-table tbody,
   .cart-table tr,
@@ -3936,4 +4174,202 @@ button.is-busy::after {
   .nav a > i { font-size: 16px; }
   .nav .nav-label { display: none; }
   .logout-link { margin-left: 4px; }
+}
+
+/* ---------- Dashboard summary tables ----------
+ *
+ * Column widths are stated rather than left to the browser. Auto table
+ * layout gives every column a share of its content's natural width, so
+ * a long money value like "RM 45,994.00" claims space that the product
+ * name then has to give up -- which is how "xiaomi 17 ultra" ended up
+ * broken across three lines.
+ *
+ * table-layout: fixed makes the widths below authoritative: the name
+ * gets whatever is left, and it is the only thing allowed to wrap.
+ */
+.summary-table { table-layout: fixed; width: 100%; }
+
+/* Headers never wrap. They are one short word each, and a wrapped
+ * header ("SOL / D") looks like a rendering fault rather than a narrow
+ * column. The widths below are set so the UPPERCASE header, which is
+ * wider than the numbers underneath it, is what fits. */
+.summary-table th { white-space: nowrap; }
+
+/* Widths as PERCENTAGES, so the table scales with its card.
+ *
+ * Two things were wrong with fixed pixels here:
+ *
+ *   Under table-layout: fixed, a column with no width shares the
+ *   leftover space equally with the other undeclared ones. The
+ *   thumbnail had none, so it claimed half of what was left and the
+ *   product name got the other half -- hence names breaking mid-word
+ *   beside a mostly empty picture column.
+ *
+ *   Fixed pixels then over-committed: 68 + 68 + 124 plus 15px of
+ *   padding on each of four cells is 380px of fixed cost, and this card
+ *   sits in a two-column dashboard grid where it can be about 310px
+ *   wide. The name column went negative.
+ *
+ * The padding is trimmed for the same reason: 15px per side on four
+ * cells is 120px that the content never sees. */
+.summary-table th,
+.summary-table td { padding: 11px 8px; }
+
+.summary-table .cell-thumb { width: 62px; }
+.summary-table .col-num    { width: 16%; text-align: right; }
+.summary-table .col-money  { width: 32%; text-align: right; white-space: nowrap; }
+
+/* The name column takes whatever remains, and breaks on spaces only.
+ * The global overflow-wrap: break-word would otherwise split a word
+ * anywhere the moment the column is a little tight. */
+.summary-table td:not(.cell-thumb):not(.col-num):not(.col-money),
+.summary-table td a {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+/* Below this the card is too narrow to spend 62px on decoration.
+ *
+ * 1360px, not 1200px: this card sits in a two-column dashboard grid, so
+ * the window is roughly twice the card. At a 1280px laptop the picture
+ * left the name column about 100px, which is narrower than the product
+ * names it has to hold. The name is the information; the picture is
+ * not. */
+@media (max-width: 1360px) {
+  .summary-table .cell-thumb { display: none; }
+}
+
+.summary-table td,
+.summary-table th { vertical-align: middle; }
+
+@media (max-width: 600px) {
+  /* The thumbnail is decoration on a leaderboard, and it was being
+     squeezed into a two-pixel sliver beside the product name.
+     
+     This is the opposite call from the cart, where the photo IS
+     information -- "is this the item I am buying". On a Top 5 list the
+     name already answers that.
+     
+     The <th> carries the same class, otherwise hiding only the <td>
+     leaves an empty first column behind and the name column keeps the
+     narrow width it was squeezed into. */
+  .summary-table .cell-thumb { display: none; }
+
+  .summary-table th,
+  .summary-table td {
+    padding-left: 6px;
+    padding-right: 6px;
+    font-size: 13px;
+  }
+
+  /* 58px, not 44px: "SOLD" in uppercase with letter-spacing needs ~47px
+   * plus padding, and the header is wider than the digit beneath it. */
+  .summary-table .col-num   { width: 58px; }
+  .summary-table .col-money { width: 104px; font-size: 12px; }
+
+  /* The header row shrinks a little so the uppercase labels stay on one
+     line without stealing width from the product name. */
+  .summary-table th { font-size: 11px; letter-spacing: 0.3px; }
+
+  /* The name is the only column that wraps, and it wraps on word
+     boundaries rather than mid-word. */
+  .summary-table a {
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: none;
+  }
+}
+
+/* ---------- Editable option rows ----------
+ *
+ * Each row is a form whose controls live in different cells. They are
+ * tied together by the HTML5 `form` attribute rather than by nesting,
+ * because a <form> cannot contain a <tr> split across <td>s and forms
+ * cannot be nested at all.
+ */
+.option-row-form { display: contents; }
+
+.option-value-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.option-value-input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* Inputs inside a table row are compact: the row is already dense, and
+   a full-size control makes every row twice as tall as it needs to be. */
+.admin-table .form-control,
+.admin-table .option-value-input,
+.admin-table .option-delta-input,
+.admin-table .option-photo-select {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.admin-table .option-delta-input { width: 96px; text-align: right; }
+.admin-table .option-photo-select { max-width: 170px; }
+.admin-table .option-colour-input {
+  width: 34px;
+  height: 30px;
+  padding: 2px;
+  flex-shrink: 0;
+}
+
+.option-sold-out .option-value-input,
+.option-sold-out .option-delta-input { opacity: .7; }
+
+@media (max-width: 860px) {
+  .admin-table .option-photo-select { max-width: 130px; }
+  .admin-table .option-delta-input { width: 82px; }
+}
+
+/* ---------- Naming a product photo ---------- */
+.photo-name-form {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px 0;
+}
+
+.photo-name-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.photo-name-form .btn-sm {
+  flex-shrink: 0;
+  min-height: 0;
+  padding: 5px 9px;
+}
+
+/* An unnamed photo is worth pointing out: it is the one that will show
+   up as "Photo 3 (unnamed)" in the colour picker. */
+.photo-name-input:placeholder-shown {
+  border-color: #f0c36d;
+  background: #fffdf6;
+}
+
+/* ---------- Save-all bar ---------- */
+.bulk-save-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.bulk-save-bar .btn-primary { flex-shrink: 0; }
+
+@media (max-width: 600px) {
+  .bulk-save-bar { flex-direction: column; align-items: stretch; }
+  .bulk-save-bar .btn-primary { width: 100%; }
 }

@@ -81,29 +81,35 @@ $filter = get('filter');
 
 $threshold = reorder_level_ready() ? 'p.reorder_level' : (string)STOCK_DEFAULT_REORDER_LEVEL;
 
-$sql = "SELECT p.*, c.name AS category_name
-          FROM products p
+// FROM/WHERE built once so the count and the page can never disagree.
+// $threshold is a column name or an integer constant chosen by the code
+// above, never anything from the request.
+$from = " FROM products p
           LEFT JOIN categories c ON c.id = p.category_id
          WHERE 1 = 1";
 $params = [];
 
 if ($q !== '') {
-    $sql     .= ' AND (p.name LIKE ? OR c.name LIKE ?)';
+    $from    .= ' AND (p.name LIKE ? OR c.name LIKE ?)';
     $params[] = '%' . $q . '%';
     $params[] = '%' . $q . '%';
 }
 
 if ($filter === 'out') {
-    $sql .= ' AND p.stock <= 0';
+    $from .= ' AND p.stock <= 0';
 } elseif ($filter === 'low') {
-    $sql .= " AND p.stock > 0 AND p.stock <= $threshold";
+    $from .= " AND p.stock > 0 AND p.stock <= $threshold";
 } elseif ($filter === 'ok') {
-    $sql .= " AND p.stock > $threshold";
+    $from .= " AND p.stock > $threshold";
 }
 
-$sql .= ' ORDER BY p.stock ASC, p.name ASC';
+$pager = paginate((int)db_value('SELECT COUNT(*)' . $from, $params), 20);
 
-$products = db_all($sql, $params);
+$products = db_all(
+    'SELECT p.*, c.name AS category_name' . $from
+        . ' ORDER BY p.stock ASC, p.name ASC' . pager_limit($pager),
+    $params
+);
 
 $overview = stock_overview();
 $mismatch = stock_reconciliation();
@@ -117,8 +123,10 @@ $selected   = $selectedId === null
 // An AJAX search must return the ROWS only. Returning the whole page is
 // what made the admin panel render inside its own table body.
 if (is_ajax()) {
-    admin_stock_rows($products, $q, $filter, $selected ? (int)$selected['id'] : null);
-    exit;
+    ajax_rows_with_pager(
+        fn() => admin_stock_rows($products, $q, $filter, $selected ? (int)$selected['id'] : null),
+        $pager
+    );
 }
 
 $history = $selected ? stock_movements((int)$selected['id'], 30) : [];
@@ -229,6 +237,8 @@ include __DIR__ . '/../includes/admin_header.php';
                         </tbody>
                     </table>
                 </div>
+
+                <?php render_pager($pager); ?>
             </div>
         </div>
 

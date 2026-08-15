@@ -54,7 +54,8 @@ if (is_post()) {
 
 $filter  = get('filter');
 $q       = get('q');
-$reviews = all_reviews($filter, $q);
+$pager   = paginate(count_all_reviews($filter, $q), 20);
+$reviews = all_reviews($filter, $q, pager_limit($pager));
 $stats   = review_overview();
 
 $filterOptions = [
@@ -109,7 +110,7 @@ include __DIR__ . '/../includes/admin_header.php';
         </a>
         <a href="/admin/reviews.php?filter=low" class="card stat-tile">
             <span class="stat-icon"><i class="fas fa-triangle-exclamation"></i></span>
-            <span class="stat-value"><?= count(all_reviews('low')) ?></span>
+            <span class="stat-value"><?= count_all_reviews('low') ?></span>
             <span class="stat-label">Low Ratings</span>
         </a>
     </div>
@@ -182,6 +183,8 @@ include __DIR__ . '/../includes/admin_header.php';
                 </div>
             <?php endforeach; ?>
         <?php endif; ?>
+
+        <?php render_pager($pager); ?>
     </div>
 </div>
 

@@ -112,6 +112,7 @@ if (is_post()) {
                 }
 
                 captcha_clear('login');
+                unset($_SESSION[LOGIN_PENDING_EMAIL]);
                 login_user($user);
                 $_SESSION['auth_via'] = 'password';
 
@@ -125,12 +126,48 @@ if (is_post()) {
             }
         }
     }
+    // Remember which address this page is currently about.
+    //
+    // The CAPTCHA requirement is derived from that address's failure
+    // count, and the redirect below only carries the submitted values
+    // for ONE request. Without this, a plain refresh would leave the
+    // email box empty, the requirement would evaluate to false, and the
+    // CAPTCHA would disappear -- while the POST handler, which computes
+    // it from the address actually submitted, would still demand one.
+    // The member would then be asked to solve a CAPTCHA that was never
+    // drawn, and every attempt would count as another failure.
+    if ($email !== '') {
+        $_SESSION[LOGIN_PENDING_EMAIL] = $email;
+    }
+
+    // Validation failed. Answer with a redirect rather than a page, so
+    // the browser's history entry is a GET and F5 cannot resubmit.
+    // The errors and what was typed are carried across the redirect.
+    redirect_back();
 }
 
-// A failed attempt may have crossed the threshold, so re-evaluate
-// before rendering or the CAPTCHA would only appear one request late.
+// ---------- What this page is about ----------
+// post('email') answers on the request straight after a failed submit,
+// because the parked copy is still there. On any refresh after that it
+// is empty, so the session-remembered address takes over. Everything the
+// page shows -- the CAPTCHA, the lockout countdown, the email box --
+// hangs off this one value, so all three stay consistent across as many
+// refreshes as the member cares to make.
+$pendingEmail = post('email');
+
+if ($pendingEmail === '') {
+    $pendingEmail = (string)($_SESSION[LOGIN_PENDING_EMAIL] ?? '');
+}
+
 $needCaptcha = captcha_ready()
-    && failed_attempts_for_email(post('email')) >= CAPTCHA_ON_LOGIN_AFTER;
+    && failed_attempts_for_email($pendingEmail) >= CAPTCHA_ON_LOGIN_AFTER;
+
+// Recomputed here rather than relied on from the POST branch, which no
+// longer renders anything. This is also why the countdown survives a
+// refresh now, where before it was drawn once and lost.
+if ($pendingEmail !== '') {
+    $lock = login_lock_status($pendingEmail);
+}
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -163,8 +200,8 @@ include __DIR__ . '/../includes/header.php';
         <form action="/auth/login.php" method="POST" class="form-standard" id="loginForm">
             <?php csrf_field(); ?>
 
-            <?php field('email', 'Email Address', function () {
-                html_email('email', '', ['required' => true, 'autofocus' => true, 'maxlength' => 100]);
+            <?php field('email', 'Email Address', function () use ($pendingEmail) {
+                html_email('email', $pendingEmail, ['required' => true, 'autofocus' => true, 'maxlength' => 100]);
             }, true); ?>
 
             <?php field('password', 'Password', function () {

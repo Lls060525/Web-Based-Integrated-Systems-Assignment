@@ -13,6 +13,16 @@
 // ============================================================
 
 /** True once the login_attempts table exists (see the migration). */
+/**
+ * Session key holding the address the login form is currently about.
+ *
+ * Set when an attempt fails, cleared on success. The login page needs a
+ * value that outlives a single request: the CAPTCHA requirement and the
+ * lockout countdown are both derived from an address, and a refresh
+ * would otherwise leave the page with nothing to derive them from.
+ */
+const LOGIN_PENDING_EMAIL = 'login_pending_email';
+
 function login_guard_ready(): bool
 {
     return db_table_exists('login_attempts');
@@ -245,8 +255,20 @@ function locked_accounts(): array
     );
 }
 
-/** Recent attempts for the admin audit view. */
-function recent_login_attempts(int $limit = 50, string $filter = ''): array
+/**
+ * Recent attempts for the admin audit view, one page at a time.
+ *
+ * This table gains a row on EVERY sign-in attempt, successful or not, so
+ * it is the fastest-growing table in the database. It used to be read
+ * with a flat LIMIT 100 and no way to see anything older, which meant
+ * the audit trail existed but was not actually auditable.
+ *
+ * $limit and $offset are cast to int and clamped before being placed in
+ * the SQL. MySQL will not accept a placeholder for LIMIT/OFFSET under
+ * emulated prepares, so they are interpolated -- but only ever as
+ * integers this code produced itself, never as text from the request.
+ */
+function recent_login_attempts(int $limit = 50, string $filter = '', int $offset = 0): array
 {
     if (!login_guard_ready()) {
         return [];
@@ -261,9 +283,35 @@ function recent_login_attempts(int $limit = 50, string $filter = ''): array
         $params[] = '%' . $filter . '%';
     }
 
-    $sql .= ' ORDER BY attempted_at DESC LIMIT ' . max(1, min(500, $limit));
+    $limit  = max(1, min(500, $limit));
+    $offset = max(0, $offset);
+
+    $sql .= ' ORDER BY attempted_at DESC LIMIT ' . $limit . ' OFFSET ' . $offset;
 
     return db_all($sql, $params);
+}
+
+/**
+ * How many attempts match the filter. Needed so the pager knows how many
+ * pages there are; counted with the same WHERE clause as the page query
+ * so the two can never disagree.
+ */
+function count_login_attempts(string $filter = ''): int
+{
+    if (!login_guard_ready()) {
+        return 0;
+    }
+
+    $sql    = 'SELECT COUNT(*) FROM login_attempts';
+    $params = [];
+
+    if ($filter !== '') {
+        $sql     .= ' WHERE (email LIKE ? OR ip_address LIKE ?)';
+        $params[] = '%' . $filter . '%';
+        $params[] = '%' . $filter . '%';
+    }
+
+    return (int)db_value($sql, $params);
 }
 
 /** Delete audit rows older than the retention period. */

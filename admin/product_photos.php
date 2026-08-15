@@ -88,6 +88,74 @@ if (is_post()) {
                 }
             }
 
+        } elseif ($action === 'rename_all') {
+            // One save for every photo name. Naming eight photos used to
+            // be eight submits and eight page loads.
+            $posted  = is_array($_POST['photo_name'] ?? null) ? $_POST['photo_name'] : [];
+            $changed = 0;
+            $tooLong = 0;
+
+            $current = [];
+            foreach (product_photos($productId) as $ph) {
+                $current[(int)$ph['id']] = $ph['alt_text'];
+            }
+
+            foreach ($posted as $photoId => $label) {
+                $photoId = (int)$photoId;
+                $label   = trim((string)$label);
+
+                if (!array_key_exists($photoId, $current)) {
+                    continue;
+                }
+
+                if (mb_strlen($label) > 120) {
+                    $tooLong++;
+                    continue;
+                }
+
+                // Unchanged rows are skipped, so saving with nothing edited
+                // costs no queries.
+                if ((string)($current[$photoId] ?? '') === $label) {
+                    continue;
+                }
+
+                db_exec(
+                    'UPDATE product_photos SET alt_text = ? WHERE id = ? AND product_id = ?',
+                    [$label !== '' ? $label : null, $photoId, $productId]
+                );
+
+                $changed++;
+            }
+
+            if ($tooLong > 0) {
+                flash_error($tooLong . ' name(s) were longer than 120 characters and were not saved.');
+            } elseif ($changed === 0) {
+                flash_success('Nothing had changed.');
+            } else {
+                flash_success($changed . ' photo name' . ($changed === 1 ? '' : 's') . ' saved.');
+            }
+
+        } elseif ($action === 'rename') {
+            // alt_text does double duty: it is the image's alt attribute
+            // on the storefront, and the label shown when picking which
+            // photo a colour maps to. Without it that picker could only
+            // say "Photo 1", "Photo 2", which tells nobody anything.
+            $photoId = post_int('photo_id');
+            $label   = trim(post('alt_text'));
+
+            if (mb_strlen($label) > 120) {
+                flash_error('That name is longer than 120 characters.');
+            } elseif ($photoId === null || !find_product_photo($photoId, $productId)) {
+                flash_error('Photo not found.');
+            } else {
+                db_exec(
+                    'UPDATE product_photos SET alt_text = ? WHERE id = ? AND product_id = ?',
+                    [$label !== '' ? $label : null, $photoId, $productId]
+                );
+
+                flash_success($label !== '' ? 'Photo renamed to "' . $label . '".' : 'Photo name cleared.');
+            }
+
         } elseif ($action === 'set_primary') {
             $photoId = post_int('photo_id');
 
@@ -231,6 +299,16 @@ include __DIR__ . '/../includes/admin_header.php';
         <?php if (count($photos) === 0): ?>
             <p class="muted">No photos yet. Add the first one above.</p>
         <?php else: ?>
+            <?php /* One form for every photo name. Declared empty here; the
+                     inputs join it by id, because a <form> cannot wrap the
+                     grid without swallowing the per-photo forms inside it,
+                     and forms cannot nest. */ ?>
+            <form action="/admin/product_photos.php?id=<?= (int)$productId ?>"
+                  method="POST" id="photoNames">
+                <?php csrf_field(); ?>
+                <?php html_hidden('action', 'rename_all'); ?>
+            </form>
+
             <ul class="photo-grid" id="photoGrid">
                 <?php foreach ($photos as $photo): ?>
                     <li class="photo-tile <?= (int)$photo['is_primary'] === 1 ? 'is-primary' : '' ?>"
@@ -240,7 +318,8 @@ include __DIR__ . '/../includes/admin_header.php';
                             <i class="fas fa-grip-vertical"></i>
                         </span>
 
-                        <img src="<?= e(product_image($photo['filename'])) ?>" alt="">
+                        <img src="<?= e(product_image($photo['filename'])) ?>"
+                             alt="<?= e($photo['alt_text'] ?? '') ?>">
 
                         <?php if ((int)$photo['is_primary'] === 1): ?>
                             <span class="photo-cover-badge">
@@ -253,6 +332,19 @@ include __DIR__ . '/../includes/admin_header.php';
                                 <i class="fas fa-sliders"></i> Edited
                             </span>
                         <?php endif; ?>
+
+                        <?php // Naming a photo is what makes the colour picker on
+                              // Manage Customer Choices readable, and it is the
+                              // alt text a screen reader announces. One field,
+                              // both jobs. ?>
+                        <div class="photo-name-form">
+                            <input type="text" form="photoNames"
+                                   name="photo_name[<?= (int)$photo['id'] ?>]" maxlength="120"
+                                   value="<?= e($photo['alt_text'] ?? '') ?>"
+                                   placeholder="Name this photo"
+                                   class="form-control photo-name-input"
+                                   aria-label="Name for this photo">
+                        </div>
 
                         <div class="photo-actions">
                             <?php if (image_processing_ready()): ?>
@@ -282,6 +374,19 @@ include __DIR__ . '/../includes/admin_header.php';
                     </li>
                 <?php endforeach; ?>
             </ul>
+
+            <div class="bulk-save-bar">
+                <span class="muted small-note">
+                    A named photo is what the colour picker on
+                    <a href="/admin/product_options.php?id=<?= (int)$productId ?>">Manage Customer Choices</a>
+                    shows instead of "Photo 3".
+                </span>
+
+                <button type="submit" form="photoNames" class="btn-primary"
+                        data-busy="Saving...">
+                    Save All Names
+                </button>
+            </div>
 
             <!-- Submitted by admin.js after a drag finishes. -->
             <form action="/admin/product_photos.php?id=<?= (int)$productId ?>" method="POST"

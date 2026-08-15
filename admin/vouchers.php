@@ -60,22 +60,24 @@ if (is_post()) {
 // ---------- Listing ----------
 $q = get('q');
 
-$sql    = 'SELECT * FROM vouchers';
+$from   = ' FROM vouchers';
 $params = [];
 
 if ($q !== '') {
-    $sql     .= ' WHERE (code LIKE ? OR description LIKE ?)';
+    $from    .= ' WHERE (code LIKE ? OR description LIKE ?)';
     $params[] = '%' . $q . '%';
     $params[] = '%' . $q . '%';
 }
 
-$sql .= ' ORDER BY id DESC';
+$pager = paginate((int)db_value('SELECT COUNT(*)' . $from, $params), 20);
 
-$vouchers = db_all($sql, $params);
+$vouchers = db_all(
+    'SELECT *' . $from . ' ORDER BY id DESC' . pager_limit($pager),
+    $params
+);
 
 if (is_ajax()) {
-    admin_voucher_rows($vouchers);
-    exit;
+    ajax_rows_with_pager(fn() => admin_voucher_rows($vouchers), $pager);
 }
 
 // Headline numbers for the summary strip.
@@ -157,6 +159,8 @@ include __DIR__ . '/../includes/admin_header.php';
                 </tbody>
             </table>
         </div>
+
+        <?php render_pager($pager); ?>
     </div>
 
     <p class="muted mt-2 small-note">

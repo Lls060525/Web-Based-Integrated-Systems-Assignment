@@ -849,14 +849,57 @@ function batch_delete_analysis(array $ids): array
         $ids
     );
 
+    // ----- Related-row counts, one query per TABLE rather than per product
+    //
+    // This used to run six COUNT(*) queries inside the loop, so selecting
+    // 100 products for deletion cost 601 round trips. Each of those
+    // counts is now a single GROUP BY over the whole selection, which
+    // makes it six queries no matter how many products were picked.
+    //
+    // The tables are checked with db_table_exists() first because the
+    // optional modules may never have been installed; a missing table
+    // means a count of zero, not an error.
+    $counts = [];
+
+    $sources = [
+        'orders'    => ['order_items',     true],
+        'cart'      => ['cart',            true],
+        'wishlist'  => ['wishlist',        db_table_exists('wishlist')],
+        'reviews'   => ['reviews',         db_table_exists('reviews')],
+        'photos'    => ['product_photos',  db_table_exists('product_photos')],
+        'movements' => ['stock_movements', db_table_exists('stock_movements')],
+    ];
+
+    foreach ($sources as $key => [$table, $present]) {
+        $counts[$key] = [];
+
+        if (!$present) {
+            continue;
+        }
+
+        // $table is a literal from the list above, never anything from
+        // the request. $marks is a placeholder list built by array_fill.
+        $grouped = db_all(
+            "SELECT product_id, COUNT(*) AS n
+               FROM `$table`
+              WHERE product_id IN ($marks)
+              GROUP BY product_id",
+            $ids
+        );
+
+        foreach ($grouped as $g) {
+            $counts[$key][(int)$g['product_id']] = (int)$g['n'];
+        }
+    }
+
     $rows = $safe = $blocked = [];
 
     foreach ($products as $p) {
         $id = (int)$p['id'];
 
-        $orderCount = (int)db_value(
-            'SELECT COUNT(*) FROM order_items WHERE product_id = ?', [$id]
-        );
+        // GROUP BY returns no row for a product with no related rows, so
+        // an absent key means zero.
+        $orderCount = $counts['orders'][$id] ?? 0;
 
         $row = [
             'id'            => $id,
@@ -866,15 +909,11 @@ function batch_delete_analysis(array $ids): array
             'stock'         => (int)$p['stock'],
             'status'        => $p['status'],
             'orders'        => $orderCount,
-            'cart'          => (int)db_value('SELECT COUNT(*) FROM cart WHERE product_id = ?', [$id]),
-            'wishlist'      => db_table_exists('wishlist')
-                ? (int)db_value('SELECT COUNT(*) FROM wishlist WHERE product_id = ?', [$id]) : 0,
-            'reviews'       => db_table_exists('reviews')
-                ? (int)db_value('SELECT COUNT(*) FROM reviews WHERE product_id = ?', [$id]) : 0,
-            'photos'        => db_table_exists('product_photos')
-                ? (int)db_value('SELECT COUNT(*) FROM product_photos WHERE product_id = ?', [$id]) : 0,
-            'movements'     => db_table_exists('stock_movements')
-                ? (int)db_value('SELECT COUNT(*) FROM stock_movements WHERE product_id = ?', [$id]) : 0,
+            'cart'          => $counts['cart'][$id]      ?? 0,
+            'wishlist'      => $counts['wishlist'][$id]  ?? 0,
+            'reviews'       => $counts['reviews'][$id]   ?? 0,
+            'photos'        => $counts['photos'][$id]    ?? 0,
+            'movements'     => $counts['movements'][$id] ?? 0,
         ];
 
         $row['deletable'] = $orderCount === 0;

@@ -20,6 +20,83 @@ function image_processing_ready(): bool
     return extension_loaded('gd') && function_exists('imagecreatetruecolor');
 }
 
+/**
+ * Why GD is not loaded, in enough detail to actually fix it.
+ *
+ * "Uncomment extension=gd in php.ini" is the standard advice and it is
+ * not enough, because a XAMPP machine has more than one php.ini and the
+ * one you find first is usually not the one Apache reads. The CLI has
+ * its own too, so `php -m` in a terminal can list gd while the web
+ * server still has not got it.
+ *
+ * This reports the file PHP ACTUALLY loaded for this request -- which,
+ * read from a page in the browser, is by definition Apache's copy.
+ */
+function gd_diagnosis(): array
+{
+    $loadedIni = php_ini_loaded_file();
+    $extDir    = ini_get('extension_dir');
+
+    // Windows names the file php_gd.dll from PHP 8.0; before that it was
+    // php_gd2.dll. An extension= line naming the old one silently fails.
+    $candidates = [];
+
+    if (is_string($extDir) && $extDir !== '' && is_dir($extDir)) {
+        foreach (['php_gd.dll', 'php_gd2.dll', 'gd.so'] as $file) {
+            if (is_file(rtrim($extDir, '/\\') . DIRECTORY_SEPARATOR . $file)) {
+                $candidates[] = $file;
+            }
+        }
+    }
+
+    return [
+        'loaded'      => extension_loaded('gd'),
+        'ini_file'    => $loadedIni === false || $loadedIni === '' ? null : $loadedIni,
+        'scanned_dir' => php_ini_scanned_files() ?: null,
+        'ext_dir'     => $extDir === false || $extDir === '' ? null : $extDir,
+        'ext_files'   => $candidates,
+        'sapi'        => PHP_SAPI,
+        'php_version' => PHP_VERSION,
+    ];
+}
+
+/** The GD hint, written for the machine it is running on. */
+function gd_hint(): string
+{
+    $d = gd_diagnosis();
+
+    if ($d['loaded']) {
+        return '';
+    }
+
+    if ($d['ini_file'] === null) {
+        return 'PHP is running with no php.ini at all. Copy php.ini-development '
+             . 'to php.ini in your PHP folder, then enable GD in it.';
+    }
+
+    $parts = [];
+
+    $parts[] = 'Edit THIS file - not any other php.ini on the machine: '
+             . $d['ini_file'];
+
+    $parts[] = 'Find the line ";extension=gd", remove the leading semicolon, save, '
+             . 'then FULLY stop and start Apache (a restart sometimes leaves the old '
+             . 'process running).';
+
+    if ($d['ext_dir'] === null) {
+        $parts[] = 'extension_dir is not set. Add: extension_dir = "C:\\xampp\\php\\ext"';
+    } elseif ($d['ext_files'] === []) {
+        $parts[] = 'Note: no GD library file was found in ' . $d['ext_dir']
+                 . ', so this PHP build may not ship one.';
+    }
+
+    $parts[] = 'Reading this in a browser means the path above is the one Apache uses. '
+             . 'A terminal running "php -m" reads a different file, so it is not a '
+             . 'reliable check.';
+
+    return implode(' ', $parts);
+}
+
 /** Which GD features this build actually has. */
 function image_capabilities(): array
 {

@@ -93,13 +93,32 @@ include __DIR__ . '/../includes/admin_header.php';
     </div>
 
     <?php if (!image_processing_ready()): ?>
+        <?php $gd = gd_diagnosis(); ?>
         <div class="alert alert-error mt-4">
             <strong>The PHP GD extension is not enabled</strong>, so images cannot be
             processed on the server.
             <br><br>
-            Open <code>C:\xampp\php\php.ini</code>, find the line
-            <code>;extension=gd</code>, remove the leading semicolon, save,
-            and restart Apache from the XAMPP control panel.
+            <?php if ($gd['ini_file'] !== null): ?>
+                <?php /* The path is read from the running process, so it is
+                         Apache's php.ini by definition -- not whichever one
+                         happens to be easiest to find on the disk. */ ?>
+                Open <code><?= e($gd['ini_file']) ?></code>, find the line
+                <code>;extension=gd</code>, remove the leading semicolon, save,
+                then <strong>fully stop and start</strong> Apache from the XAMPP
+                control panel.
+                <br><br>
+                <span class="small-note">
+                    PHP <?= e($gd['php_version']) ?> (<?= e($gd['sapi']) ?>),
+                    extension_dir <code><?= e($gd['ext_dir'] ?? 'not set') ?></code><?php
+                        if ($gd['ext_dir'] !== null && $gd['ext_files'] === []): ?>
+                        &mdash; no GD library file found there, so this build may not ship one<?php
+                        endif; ?>.
+                </span>
+            <?php else: ?>
+                PHP is running without a php.ini at all. Copy
+                <code>php.ini-development</code> to <code>php.ini</code> in your PHP
+                folder, enable GD in it, then restart Apache.
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 

@@ -433,19 +433,64 @@ function spec_filter_options(?int $categoryId): array
         [$categoryId]
     );
 
+    if ($attributes === []) {
+        return [];
+    }
+
+    // ----- Both aggregates in two queries, not two per attribute
+    //
+    // This used to run one MIN/MAX or one GROUP BY inside the loop, so a
+    // catalogue with the 13 seeded attributes cost 14 queries on every
+    // page load of the shop's busiest page. Grouping by attribute_id
+    // makes it three regardless of how many attributes exist.
+    $ids   = array_column($attributes, 'id');
+    $marks = implode(',', array_fill(0, count($ids), '?'));
+
+    // Numeric attributes: the min and max across all active products.
+    $ranges = [];
+
+    foreach (db_all(
+        "SELECT ps.attribute_id,
+                MIN(ps.value_number) AS min_value,
+                MAX(ps.value_number) AS max_value
+           FROM product_specs ps
+           JOIN products p ON p.id = ps.product_id
+          WHERE ps.attribute_id IN ($marks) AND p.status = 'active'
+          GROUP BY ps.attribute_id",
+        $ids
+    ) as $r) {
+        $ranges[(int)$r['attribute_id']] = $r;
+    }
+
+    // Text attributes: every distinct value and how many products have it.
+    // Ordered here so the per-attribute lists come out already sorted.
+    $valuesByAttribute = [];
+
+    foreach (db_all(
+        "SELECT ps.attribute_id, ps.value_text, COUNT(*) AS product_count
+           FROM product_specs ps
+           JOIN products p ON p.id = ps.product_id
+          WHERE ps.attribute_id IN ($marks) AND p.status = 'active'
+          GROUP BY ps.attribute_id, ps.value_text
+          ORDER BY product_count DESC, ps.value_text ASC",
+        $ids
+    ) as $r) {
+        $valuesByAttribute[(int)$r['attribute_id']][] = [
+            'value_text'    => $r['value_text'],
+            'product_count' => $r['product_count'],
+        ];
+    }
+
     $out = [];
 
     foreach ($attributes as $attribute) {
-        if ($attribute['data_type'] === 'number') {
-            $range = db_one(
-                "SELECT MIN(ps.value_number) AS min_value, MAX(ps.value_number) AS max_value
-                   FROM product_specs ps
-                   JOIN products p ON p.id = ps.product_id
-                  WHERE ps.attribute_id = ? AND p.status = 'active'",
-                [$attribute['id']]
-            );
+        $id = (int)$attribute['id'];
 
-            if ($range === false || $range['min_value'] === null) {
+        if ($attribute['data_type'] === 'number') {
+            $range = $ranges[$id] ?? null;
+
+            // No active product carries this attribute.
+            if ($range === null || $range['min_value'] === null) {
                 continue;
             }
 
@@ -460,15 +505,7 @@ function spec_filter_options(?int $categoryId): array
             }
 
         } else {
-            $values = db_all(
-                "SELECT ps.value_text, COUNT(*) AS product_count
-                   FROM product_specs ps
-                   JOIN products p ON p.id = ps.product_id
-                  WHERE ps.attribute_id = ? AND p.status = 'active'
-                  GROUP BY ps.value_text
-                  ORDER BY product_count DESC, ps.value_text ASC",
-                [$attribute['id']]
-            );
+            $values = $valuesByAttribute[$id] ?? [];
 
             if (count($values) < 2) {
                 continue;
@@ -669,6 +706,140 @@ function spec_comparable_products(array $product, int $limit = 8): array
 // the chosen options, used both to tell cart lines apart and to look
 // the choices back up.
 
+/**
+ * Which of these products make the customer choose something.
+ *
+ * The product grid asks this once per tile. Answering it by calling
+ * product_selectable_specs() meant a full attribute query -- and until
+ * recently one query per attribute on top -- for all twelve cards on the
+ * catalogue page, purely to decide between two button labels.
+ *
+ * One query answers it for the whole page. The result is cached for the
+ * request, so a product appearing in both the grid and the "related
+ * products" strip is not asked about twice.
+ *
+ * @param  int[] $productIds
+ * @return array<int, bool> keyed by product id
+ */
+function spec_products_needing_choice(array $productIds): array
+{
+    $cache = &spec_needs_choice_cache();
+
+    $ids = [];
+
+    foreach ($productIds as $id) {
+        $id = (int)$id;
+
+        if ($id > 0 && !array_key_exists($id, $cache)) {
+            $ids[$id] = $id;
+        }
+    }
+
+    if ($ids !== []) {
+        // Every unknown id defaults to false, so a product with no
+        // selectable specs is remembered rather than re-queried.
+        foreach ($ids as $id) {
+            $cache[$id] = false;
+        }
+
+        if (spec_options_ready()) {
+            $ids   = array_values($ids);
+            $marks = implode(',', array_fill(0, count($ids), '?'));
+
+            $rows = db_all(
+                "SELECT DISTINCT o.product_id
+                   FROM product_spec_options o
+                   JOIN spec_attributes sa ON sa.id = o.attribute_id
+                  WHERE o.product_id IN ($marks) AND sa.is_selectable = 1",
+                $ids
+            );
+
+            foreach ($rows as $r) {
+                $cache[(int)$r['product_id']] = true;
+            }
+        }
+    }
+
+    $out = [];
+
+    foreach ($productIds as $id) {
+        $out[(int)$id] = $cache[(int)$id] ?? false;
+    }
+
+    return $out;
+}
+
+/** Does this one product make the customer choose? Uses the same cache. */
+function product_needs_choice(int $productId): bool
+{
+    $map = spec_products_needing_choice([$productId]);
+
+    return $map[$productId] ?? false;
+}
+
+/** Request-lifetime store behind the two functions above. */
+function &spec_needs_choice_cache(): array
+{
+    static $cache = [];
+
+    return $cache;
+}
+
+/**
+ * A spec name written to sit mid-sentence: "Choose your colour".
+ *
+ * A blunt strtolower() reads fine for ordinary words but destroys the
+ * ones that are acronyms -- "RAM" became "ram", "5G" became "5g", "eSIM"
+ * became "esim". Capitalising instead is no better, because then
+ * "Choose your Colour" has a stray capital in the middle of a sentence.
+ *
+ * So the decision is made per word, and only for words where it is
+ * unambiguous: a word is lowercased ONLY if it is already in plain
+ * "Word" or "word" form. Anything else -- RAM, 5G, eSIM, iPhone -- is
+ * left exactly as the admin typed it, because any capital past the first
+ * letter means the capitals were deliberate.
+ *
+ * Examples:
+ *   "Colour"            -> "colour"
+ *   "RAM"               -> "RAM"
+ *   "Storage Size"      -> "storage size"
+ *   "Warranty (months)" -> "warranty (months)"
+ *   "5G Band"           -> "5G band"
+ *   "eSIM"              -> "eSIM"
+ */
+function spec_label_inline(string $name): string
+{
+    $words = preg_split('/(\s+)/u', $name, -1, PREG_SPLIT_DELIM_CAPTURE);
+
+    foreach ($words as $i => $word) {
+        if (trim($word) === '') {
+            continue;   // the separator captured above
+        }
+
+        // mb_convert_case with MB_CASE_TITLE is not used here: it would
+        // turn "(months)" into "(Months)". This compares against the
+        // simplest possible form instead.
+        $plain = mb_strtolower($word, 'UTF-8');
+
+        if ($word === $plain || $word === spec_ucfirst($plain)) {
+            $words[$i] = $plain;
+        }
+    }
+
+    return implode('', $words);
+}
+
+/** ucfirst() that does not mangle a multi-byte first character. */
+function spec_ucfirst(string $s): string
+{
+    if ($s === '') {
+        return $s;
+    }
+
+    return mb_strtoupper(mb_substr($s, 0, 1, 'UTF-8'), 'UTF-8')
+         . mb_substr($s, 1, null, 'UTF-8');
+}
+
 /** Selectable attributes for a product that actually have choices defined. */
 function product_selectable_specs(int $productId): array
 {
@@ -685,13 +856,27 @@ function product_selectable_specs(int $productId): array
         [$productId]
     );
 
+    if ($attributes === []) {
+        return [];
+    }
+
+    // Every choice for this product in one query, then grouped in PHP.
+    // Fetching per attribute meant the configurator cost one query per
+    // group it drew -- fine for a phone with two, wasteful for one with
+    // colour, storage, RAM, warranty and network band.
+    $choices = [];
+
+    foreach (db_all(
+        'SELECT * FROM product_spec_options
+          WHERE product_id = ?
+          ORDER BY sort_order ASC, id ASC',
+        [$productId]
+    ) as $option) {
+        $choices[(int)$option['attribute_id']][] = $option;
+    }
+
     foreach ($attributes as $index => $attribute) {
-        $attributes[$index]['choices'] = db_all(
-            'SELECT * FROM product_spec_options
-              WHERE product_id = ? AND attribute_id = ?
-              ORDER BY sort_order ASC, id ASC',
-            [$productId, $attribute['id']]
-        );
+        $attributes[$index]['choices'] = $choices[(int)$attribute['id']] ?? [];
 
         // Read from the attribute, not inferred from its options.
         //
@@ -828,7 +1013,7 @@ function spec_validate_selection(int $productId, array $posted): array
 
         if ($chosen === '') {
             return ['ok' => false, 'signature' => '', 'label' => '', 'delta' => 0.0,
-                    'error' => 'Please choose a ' . $attribute['name'] . '.'];
+                    'error' => 'Please choose a ' . spec_label_inline($attribute['name']) . '.'];
         }
 
         $match = null;
@@ -842,7 +1027,8 @@ function spec_validate_selection(int $productId, array $posted): array
 
         if ($match === null) {
             return ['ok' => false, 'signature' => '', 'label' => '', 'delta' => 0.0,
-                    'error' => '"' . $chosen . '" is not an available ' . $attribute['name'] . '.'];
+                    'error' => '"' . $chosen . '" is not an available '
+                            . spec_label_inline($attribute['name']) . '.'];
         }
 
         // Greying a pill out in the browser is a hint, not a control.
@@ -887,17 +1073,13 @@ function spec_describe_signature(int $productId, string $signature): array
         return ['label' => '', 'delta' => 0.0, 'valid' => false];
     }
 
+    $options = spec_option_map($productId);
+
     $labels = [];
     $delta  = 0.0;
 
     foreach ($selection as $attributeId => $value) {
-        $row = db_one(
-            'SELECT o.price_delta, o.value_text, sa.name
-               FROM product_spec_options o
-               JOIN spec_attributes sa ON sa.id = o.attribute_id
-              WHERE o.product_id = ? AND o.attribute_id = ? AND o.value_text = ?',
-            [$productId, $attributeId, $value]
-        );
+        $row = $options[$attributeId . '|' . $value] ?? null;
 
         if (!$row) {
             // The option was deleted after it went into the cart. The
@@ -915,6 +1097,109 @@ function spec_describe_signature(int $productId, string $signature): array
     $out['delta'] = round($delta, 2);
 
     return $out;
+}
+
+/**
+ * Every selectable option for a product, keyed "attributeId|value".
+ *
+ * This exists to kill an N+1 that was nested two deep. The old code ran
+ * one query per chosen attribute, inside a loop over cart lines, so a
+ * five-line cart with three options each cost fifteen queries just to
+ * print the labels.
+ *
+ * Cached for the life of the request in a static, so the same product
+ * appearing on two lines is fetched once. The cache is per-request only:
+ * an admin editing a price delta must still be visible on the next page
+ * load, which is the whole reason this is recomputed rather than stored
+ * on the cart line.
+ *
+ * @return array<string, array{price_delta: string, value_text: string, name: string}>
+ */
+function spec_option_map(int $productId): array
+{
+    $cache = &spec_option_cache();
+
+    if (!array_key_exists($productId, $cache)) {
+        spec_prefetch_options([$productId]);
+    }
+
+    return $cache[$productId] ?? [];
+}
+
+/**
+ * Load the option maps for several products in ONE query.
+ *
+ * Call this before a loop that will describe many lines; spec_option_map()
+ * then answers from memory. Skipping the call is not an error, only
+ * slower, so a caller that forgets still produces correct output.
+ */
+function spec_prefetch_options(array $productIds): void
+{
+    // Same static as spec_option_map(). PHP gives each function its own
+    // static, so the store is passed explicitly through a by-reference
+    // accessor rather than duplicated.
+    $cache = &spec_option_cache();
+
+    $ids = [];
+
+    foreach ($productIds as $id) {
+        $id = (int)$id;
+
+        if ($id > 0 && !array_key_exists($id, $cache)) {
+            $ids[$id] = $id;
+        }
+    }
+
+    if ($ids === [] || !spec_options_ready()) {
+        // Mark them as looked-up-and-empty so a second call does not
+        // retry a query that cannot succeed.
+        foreach ($ids as $id) {
+            $cache[$id] = [];
+        }
+        return;
+    }
+
+    $ids   = array_values($ids);
+    $marks = implode(',', array_fill(0, count($ids), '?'));
+
+    $rows = db_all(
+        "SELECT o.product_id, o.attribute_id, o.price_delta, o.value_text, sa.name
+           FROM product_spec_options o
+           JOIN spec_attributes sa ON sa.id = o.attribute_id
+          WHERE o.product_id IN ($marks)",
+        $ids
+    );
+
+    // Seed every requested id with an empty map first. A product with no
+    // options must be remembered as "checked, has none", otherwise it is
+    // re-queried on every line.
+    foreach ($ids as $id) {
+        $cache[$id] = [];
+    }
+
+    foreach ($rows as $r) {
+        $cache[(int)$r['product_id']][$r['attribute_id'] . '|' . $r['value_text']] = [
+            'price_delta' => $r['price_delta'],
+            'value_text'  => $r['value_text'],
+            'name'        => $r['name'],
+        ];
+    }
+}
+
+/**
+ * The shared store behind spec_option_map() and spec_prefetch_options().
+ *
+ * A function-level static belongs to one function only, so the two need a
+ * common place to keep it. Returned by reference so callers mutate the
+ * real array rather than a copy.
+ *
+ * @return array<int, array>
+ */
+function &spec_option_cache(): array
+{
+    static $cache = [];
+
+    return $cache;
 }
 
 /** Cheapest total adjustment, so the product card can show a "from" price. */

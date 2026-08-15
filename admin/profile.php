@@ -107,6 +107,10 @@ if (is_post()) {
             }
         }
     }
+    // Validation failed. Answer with a redirect rather than a page, so
+    // the browser's history entry is a GET and F5 cannot resubmit.
+    // The errors and what was typed are carried across the redirect.
+    redirect_back();
 }
 
 $user = current_user();

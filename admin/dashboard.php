@@ -119,15 +119,20 @@ include __DIR__ . '/../includes/admin_header.php';
             <?php if (count($monthly) === 0): ?>
                 <p class="muted">No orders recorded yet.</p>
             <?php else: ?>
-                <div class="bar-chart">
-                    <?php foreach ($monthly as $m): ?>
-                        <?php $height = round(((float)$m['revenue'] / $maxRevenue) * 100); ?>
-                        <div class="bar-col">
-                            <span class="bar-value"><?= e(money($m['revenue'])) ?></span>
-                            <div class="bar" style="height: <?= $height ?>%"></div>
-                            <span class="bar-label"><?= e($m['label']) ?></span>
-                        </div>
-                    <?php endforeach; ?>
+                <?php // The wrapper is what scrolls on a phone. Without it the
+                      // chart's minimum width would push the whole page sideways
+                      // instead of scrolling inside its own card. ?>
+                <div class="bar-chart-wrap">
+                    <div class="bar-chart">
+                        <?php foreach ($monthly as $m): ?>
+                            <?php $height = round(((float)$m['revenue'] / $maxRevenue) * 100); ?>
+                            <div class="bar-col">
+                                <span class="bar-value"><?= e(money($m['revenue'])) ?></span>
+                                <div class="bar" style="height: <?= $height ?>%"></div>
+                                <span class="bar-label"><?= e($m['label']) ?></span>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
             <?php endif; ?>
         </div>
@@ -152,8 +157,22 @@ include __DIR__ . '/../includes/admin_header.php';
         <!-- Top sellers -->
         <div class="card card-padded">
             <h3>Top 5 Selling Products</h3>
-            <table class="admin-table">
-                <thead><tr><th></th><th>Product</th><th>Sold</th><th>Revenue</th></tr></thead>
+            <?php // A dashboard summary should FIT, not scroll: three numbers
+                  // are not worth a sideways swipe. .summary-table opts out of
+                  // the 720px floor the full listings use. ?>
+            <div class="table-responsive">
+            <table class="admin-table summary-table">
+                <thead>
+                    <tr>
+                        <?php // The header cell needs the same class as the body
+                              // cell, or hiding the column on mobile leaves this
+                              // one behind as an empty first column. ?>
+                        <th class="cell-thumb"></th>
+                        <th>Product</th>
+                        <th class="col-num">Sold</th>
+                        <th class="col-money">Revenue</th>
+                    </tr>
+                </thead>
                 <tbody>
                 <?php if (count($topProducts) === 0): ?>
                     <tr><td colspan="4" class="table-empty">No sales yet.</td></tr>
@@ -162,13 +181,14 @@ include __DIR__ . '/../includes/admin_header.php';
                         <tr>
                             <td class="cell-thumb"><img src="<?= e(product_image($p['image'])) ?>" alt="" class="table-thumb"></td>
                             <td><a href="/admin/product_form.php?id=<?= (int)$p['id'] ?>"><?= e($p['name']) ?></a></td>
-                            <td><strong><?= (int)$p['sold'] ?></strong></td>
-                            <td><?= e(money($p['revenue'])) ?></td>
+                            <td class="col-num"><strong><?= (int)$p['sold'] ?></strong></td>
+                            <td class="col-money"><?= e(money($p['revenue'])) ?></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
                 </tbody>
             </table>
+            </div>
         </div>
 
         <!-- Low stock alert -->

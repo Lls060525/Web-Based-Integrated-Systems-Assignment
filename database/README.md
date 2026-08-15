@@ -55,11 +55,17 @@ existing order, so old sample data can produce a receipt too.
 | `migration_21_option_style.sql` | Colour swatches, per-option photo, sold-out toggle |
 | `migration_22_render_style.sql` | Display style becomes an explicit setting; clears stray swatches |
 | `migration_23_stores.sql` | The `stores` table, plus 5 sample branches with real coordinates |
+| `migration_24_indexes.sql` | Indexes for the six original-schema tables. **Safe to re-run** |
 
 **phpMyAdmin stops at the first error.** If you have already run part of a file,
 re-running the whole thing halts at *"Duplicate column name"* and never reaches the
 later sections. That is why the newer modules ship as their own small files — run
 the one you still need rather than the whole thing again.
+
+`migration_24_indexes.sql` is the exception: it checks `information_schema`
+before every `ADD INDEX`, so running it twice — or on a database that already
+happens to have some of these indexes — does nothing the second time rather than
+stopping. Run it last, after the schema is otherwise complete.
 
 ## Important: ENUM values are lowercase
 

@@ -17,17 +17,22 @@ $userId = current_user_id();
 // ---------- Optional status filter ----------
 $statusFilter = get('status');
 
-$sql    = 'SELECT * FROM orders WHERE user_id = ?';
+// FROM/WHERE shared between the count and the page so the pager and the
+// list can never disagree.
+$from   = ' FROM orders WHERE user_id = ?';
 $params = [$userId];
 
 if (in_array($statusFilter, ORDER_STATUSES, true)) {
-    $sql     .= ' AND status = ?';
+    $from    .= ' AND status = ?';
     $params[] = $statusFilter;
 }
 
-$sql .= ' ORDER BY created_at DESC';
+$pager = paginate((int)db_value('SELECT COUNT(*)' . $from, $params), 10);
 
-$orders = db_all($sql, $params);
+$orders = db_all(
+    'SELECT *' . $from . ' ORDER BY created_at DESC' . pager_limit($pager),
+    $params
+);
 
 // ---------- Load every line in one query, then group ----------
 $orderItems = [];
@@ -161,6 +166,8 @@ include __DIR__ . '/includes/header.php';
 
     <?php endforeach; ?>
     </div>
+
+    <?php render_pager($pager); ?>
 
 <?php endif; ?>
 

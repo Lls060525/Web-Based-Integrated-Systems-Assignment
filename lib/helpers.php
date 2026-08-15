@@ -11,6 +11,7 @@
 // ============================================================
 
 $_err = [];   // field errors collected by server-side validation
+$_old = [];   // what was submitted last time, replayed after a failed POST (lib/prg.php)
 
 // ------------------------------------------------------------
 // Request helpers
@@ -36,7 +37,21 @@ function is_ajax(): bool
 /** Read a trimmed POST value. */
 function post(string $key, string $default = ''): string
 {
-    return is_array($_POST[$key] ?? null) ? $default : trim((string)($_POST[$key] ?? $default));
+    if (array_key_exists($key, $_POST)) {
+        return is_array($_POST[$key]) ? $default : trim((string)$_POST[$key]);
+    }
+
+    // Not a POST field. On the GET that follows a failed submission this
+    // is where the member's previous answer comes back from, so forms
+    // written as post('email') repopulate themselves with no change.
+    // See lib/prg.php.
+    global $_old;
+
+    if (isset($_old[$key]) && !is_array($_old[$key])) {
+        return trim((string)$_old[$key]);
+    }
+
+    return $default;
 }
 
 /**
@@ -69,8 +84,21 @@ function get_int(string $key): ?int
 /** Read an integer from POST, or null when missing/invalid. */
 function post_int(string $key): ?int
 {
-    $v = filter_input(INPUT_POST, $key, FILTER_VALIDATE_INT);
-    return ($v === false || $v === null) ? null : $v;
+    if (array_key_exists($key, $_POST)) {
+        $v = filter_input(INPUT_POST, $key, FILTER_VALIDATE_INT);
+        return ($v === false || $v === null) ? null : $v;
+    }
+
+    // Same fallback as post(): a replayed form still knows what was
+    // chosen in its number and id fields.
+    global $_old;
+
+    if (isset($_old[$key]) && !is_array($_old[$key])) {
+        $v = filter_var($_old[$key], FILTER_VALIDATE_INT);
+        return $v === false ? null : $v;
+    }
+
+    return null;
 }
 
 /** Redirect and stop. */
@@ -199,6 +227,34 @@ function flash(): void
     }
 }
 
+/**
+ * One label/value row in a read-only information panel.
+ *
+ * Not a form field. Panels like "Account Information" were built out of
+ * <input readonly disabled>, which looks approximately right and is
+ * wrong in three ways: the value is clipped to whatever width the input
+ * happens to have, the CSS that greys it out also sets
+ * pointer-events: none so the text cannot even be SELECTED -- an admin
+ * looking at a member could not copy their email address -- and a screen
+ * reader announces a form control that can never be filled in.
+ *
+ * A definition list says what this actually is: a label and a value.
+ *
+ * @param bool $mono Use a monospaced face, for ids and coordinates where
+ *                   the characters matter individually.
+ */
+function detail_row(string $label, $value, bool $mono = false): void
+{
+    $text = (string)$value;
+
+    echo '<div class="info-row">'
+       . '<dt class="info-label">' . e($label) . '</dt>'
+       . '<dd class="info-value' . ($mono ? ' is-mono' : '') . '">'
+       . ($text === '' ? '<span class="muted">Not set</span>' : e($text))
+       . '</dd>'
+       . '</div>';
+}
+
 // ------------------------------------------------------------
 // Value retention
 // ------------------------------------------------------------
@@ -206,12 +262,26 @@ function flash(): void
 /**
  * Value that should currently be shown in a control:
  * the submitted value on a failed POST, otherwise the supplied default.
+ *
+ * Every html_text/html_email/html_number/html_textarea/html_select goes
+ * through here, which is why the PRG change needed no edits to any form.
+ * Before, a failed submission re-rendered the page from the POST itself,
+ * so $_POST was still populated. Now the page is fetched with a GET
+ * after a redirect and $_POST is empty -- the values come back from the
+ * copy parked in the session instead. See lib/prg.php.
  */
 function temp(string $key, $default = '')
 {
     if (is_post() && isset($_POST[$key]) && !is_array($_POST[$key])) {
         return trim((string)$_POST[$key]);
     }
+
+    global $_old;
+
+    if (isset($_old[$key]) && !is_array($_old[$key])) {
+        return trim((string)$_old[$key]);
+    }
+
     return $default;
 }
 

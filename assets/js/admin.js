@@ -103,10 +103,11 @@ $(function () {
      * button, and pressing Enter. The button used to be inert -- its submit
      * was swallowed and nothing else happened -- so on a slow first
      * keystroke it looked like the search had simply not worked. */
+    // Must match AJAX_PAGER_SEPARATOR in lib/ajax.php.
+    var PAGER_SEPARATOR = '<!--pager-->';
+
     function runSearch($form) {
-        var $input   = $form.find('.admin-search-input');
-        var query    = $input.val();
-        var $tbody   = $($form.data('target'));
+        var $tbody = $($form.data('target'));
 
         if ($tbody.length === 0) { return; }
 
@@ -121,20 +122,35 @@ $(function () {
             '<tr><td colspan="' + colspan + '" class="table-empty">Searching...</td></tr>'
         );
 
+        // The whole form, not just the text box. Members carries a hidden
+        // "status" and Stock a hidden "filter"; sending only q dropped
+        // them, so a live search inside a filtered view quietly searched
+        // the unfiltered table.
+        var payload = $form.serialize();
+
         $.ajax({
             url: window.location.pathname,
             type: 'GET',
-            data: { q: query },
+            data: payload,
             dataType: 'html'
         }).done(function (response) {
             if (mySeq < searchRendered) { return; }
             searchRendered = mySeq;
 
-            $tbody.html(response);
+            // The response is "<tr>...</tr><!--pager-->pager markup".
+            // They are split apart because a <nav> inside a <tbody> gets
+            // hoisted out of the table by the HTML parser.
+            var split = response.indexOf(PAGER_SEPARATOR);
+
+            if (split === -1) {
+                $tbody.html(response);
+            } else {
+                $tbody.html(response.slice(0, split));
+                $('#pagerSlot').html(response.slice(split + PAGER_SEPARATOR.length));
+            }
 
             // Keep the address bar in sync without reloading the page.
-            var newUrl = window.location.pathname
-                       + (query ? '?q=' + encodeURIComponent(query) : '');
+            var newUrl = window.location.pathname + (payload ? '?' + payload : '');
             window.history.replaceState({ path: newUrl }, '', newUrl);
 
         }).fail(function (xhr, status) {

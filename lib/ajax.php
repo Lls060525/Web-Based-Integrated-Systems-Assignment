@@ -109,3 +109,26 @@ function ajax_limit(string $key, int $default, int $max): int
 
     return max(1, min($max, $value ?: $default));
 }
+
+/**
+ * Send an AJAX listing response: the table rows, then the pager.
+ *
+ * The two halves are separated by a sentinel comment rather than sent as
+ * JSON because the caller is echoing raw <tr> markup already. The
+ * JavaScript splits on the sentinel and puts each half where it belongs.
+ *
+ * They cannot simply be concatenated into the tbody: a <nav> placed
+ * inside a <tbody> is hoisted out of the table by the HTML parser, so it
+ * would appear above the table instead of below it.
+ */
+const AJAX_PAGER_SEPARATOR = '<!--pager-->';
+
+function ajax_rows_with_pager(callable $renderRows, array $pager): void
+{
+    $renderRows();
+
+    echo AJAX_PAGER_SEPARATOR;
+    echo pager_body($pager);
+
+    exit;
+}

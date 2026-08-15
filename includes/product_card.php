@@ -56,7 +56,12 @@ if (!function_exists('render_product_card')) {
                     // be added from a grid: there is nowhere to pick the colour.
                     // Sending them to the detail page is honest, where posting
                     // an arbitrary default on their behalf would not be.
-                    $needsChoice = $inStock && product_selectable_specs((int)$p['id']) !== [];
+                    //
+                    // Only the yes/no is needed here, so this asks the cheap
+                    // question. The page that renders the grid prefetches the
+                    // answer for every tile in one query; product_needs_choice()
+                    // then reads from that cache.
+                    $needsChoice = $inStock && product_needs_choice((int)$p['id']);
                 ?>
 
                 <?php if ($needsChoice): ?>
@@ -87,6 +92,11 @@ if (!function_exists('render_product_card')) {
                . e($emptyMessage) . '</h3></div>';
             return;
         }
+
+        // One query answers "does this need a choice?" for every tile.
+        // Without it each card asks separately, so a twelve-product grid
+        // spent twelve queries deciding between two button labels.
+        spec_products_needing_choice(array_column($products, 'id'));
 
         echo '<div class="grid"' . ($id !== null ? ' id="' . e($id) . '"' : '') . '>';
         foreach ($products as $p) {

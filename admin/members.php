@@ -47,28 +47,31 @@ if (is_post()) {
 $q      = get('q');
 $status = get('status');
 
-$sql    = "SELECT id, name, email, status, profile_photo, created_at FROM users WHERE role = 'member'";
+$from   = " FROM users WHERE role = 'member'";
 $params = [];
 
 if ($q !== '') {
-    $sql     .= ' AND (name LIKE ? OR email LIKE ?)';
+    $from    .= ' AND (name LIKE ? OR email LIKE ?)';
     $params[] = '%' . $q . '%';
     $params[] = '%' . $q . '%';
 }
 
 if (in_array($status, USER_STATUSES, true)) {
-    $sql     .= ' AND status = ?';
+    $from    .= ' AND status = ?';
     $params[] = $status;
 }
 
-$sql .= ' ORDER BY id ASC';
+$pager = paginate((int)db_value('SELECT COUNT(*)' . $from, $params), 20);
 
-$members = db_all($sql, $params);
+$members = db_all(
+    'SELECT id, name, email, status, profile_photo, created_at' . $from
+        . ' ORDER BY id ASC' . pager_limit($pager),
+    $params
+);
 
 // The AJAX search only needs the table rows.
 if (is_ajax()) {
-    admin_member_rows($members);
-    exit;
+    ajax_rows_with_pager(fn() => admin_member_rows($members), $pager);
 }
 
 include __DIR__ . '/../includes/admin_header.php';
@@ -117,6 +120,8 @@ include __DIR__ . '/../includes/admin_header.php';
                 </tbody>
             </table>
         </div>
+
+        <?php render_pager($pager); ?>
     </div>
 </div>
 

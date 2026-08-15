@@ -89,6 +89,10 @@ $products = db_all(
 // alongside the flag the button needs.
 ob_start();
 
+// This endpoint renders cards directly rather than through
+// render_product_grid(), so it has to do the grid's prefetch itself.
+spec_products_needing_choice(array_column($products, 'id'));
+
 foreach ($products as $product) {
     render_product_card($product);
 }

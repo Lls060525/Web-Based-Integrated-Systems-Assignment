@@ -167,6 +167,10 @@ if (is_post()) {
         'email' => $email, 'opening_hours' => $hours, 'is_active' => $active,
         'sort_order' => $sortOrder, 'latitude' => $latitude, 'longitude' => $longitude,
     ]);
+    // Validation failed. Answer with a redirect rather than a page, so
+    // the browser's history entry is a GET and F5 cannot resubmit.
+    // The errors and what was typed are carried across the redirect.
+    redirect_back();
 }
 
 include __DIR__ . '/../includes/admin_header.php';

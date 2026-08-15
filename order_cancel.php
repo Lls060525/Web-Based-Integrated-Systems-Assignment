@@ -77,6 +77,10 @@ if (is_post()) {
             add_err('cancel_reason', 'We could not cancel the order just now. Please try again.');
         }
     }
+    // Validation failed. Answer with a redirect rather than a page, so
+    // the browser's history entry is a GET and F5 cannot resubmit.
+    // The errors and what was typed are carried across the redirect.
+    redirect_back();
 }
 
 $title = 'Cancel Order #' . $order['id'] . ' - ' . APP_NAME;

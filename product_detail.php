@@ -127,7 +127,7 @@ include __DIR__ . '/includes/header.php';
                         <div class="config-head">
                             <span class="config-step-no"><?= $step + 1 ?>.</span>
                             <span class="config-title">
-                                Choose your <?= e(strtolower($choice['name'])) ?>
+                                Choose your <?= e(spec_label_inline($choice['name'])) ?>
                             </span>
                             <span class="config-chosen" data-for="<?= (int)$choice['id'] ?>"></span>
                         </div>

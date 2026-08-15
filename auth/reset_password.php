@@ -53,6 +53,11 @@ if (is_post() && $reset) {
             redirect('/auth/login.php');
         }
     }
+
+    // The token stays in the URL so the replayed page can still find it.
+    // Neither password is carried across -- PRG_NEVER_KEEP drops them --
+    // which is correct: a password box should never be refilled for you.
+    redirect_back('/auth/reset_password.php?token=' . urlencode($token));
 }
 
 include __DIR__ . '/../includes/header.php';

@@ -64,6 +64,10 @@ if (is_post()) {
         $testResult = send_mail($to, APP_NAME . ' - SMTP test', $body, $attachments);
         $testResult['attached'] = count($attachments) > 0;
     }
+    // Validation failed. Answer with a redirect rather than a page, so
+    // the browser's history entry is a GET and F5 cannot resubmit.
+    // The errors and what was typed are carried across the redirect.
+    redirect_back();
 }
 
 // ---------- Environment checks ----------
@@ -86,7 +90,7 @@ $checks = [
     [
         'label' => 'PHP GD extension enabled (image processing)',
         'ok'    => image_processing_ready(),
-        'hint'  => 'Uncomment ";extension=gd" in php.ini, then restart Apache.',
+        'hint'  => gd_hint(),
     ],
     [
         'label' => 'CAPTCHA driver working (' . CAPTCHA_DRIVER . ')',

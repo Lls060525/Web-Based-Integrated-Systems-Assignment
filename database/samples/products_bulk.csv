@@ -1,0 +1,66 @@
+﻿category,name,price,stock,reorder_level,description,status
+Smartphones,iPhone 17 Pro Max,6999.00,14,3,"6.9-inch ProMotion display, A19 Pro chip, titanium frame. 5x periscope telephoto.",active
+Smartphones,iPhone 17 Pro,6299.00,20,3,"6.3-inch ProMotion display, A19 Pro chip. Three-camera system.",active
+Smartphones,iPhone 17,4899.00,32,4,6.1-inch display with A19 chip and a 48MP main camera.,active
+Smartphones,iPhone 17 Air,5499.00,11,3,"The thinnest iPhone yet at 5.6mm. A19 chip, single 48MP camera.",active
+Smartphones,Samsung Galaxy S25 Ultra,6499.00,17,3,"200MP main camera, built-in S Pen, titanium frame, 6.9-inch QHD+ AMOLED.",active
+Smartphones,Samsung Galaxy S25+,5199.00,15,3,"6.7-inch QHD+ AMOLED, Snapdragon 8 Elite, 4900mAh battery.",active
+Smartphones,Samsung Galaxy S25,4299.00,26,3,"6.2-inch FHD+ AMOLED, compact flagship with Snapdragon 8 Elite.",active
+Smartphones,Samsung Galaxy Z Fold 7,9299.00,6,3,"8-inch folding main display, 6.5-inch cover screen. Multitasking flagship.",active
+Smartphones,Samsung Galaxy Z Flip 7,4799.00,9,3,Compact folding phone with a 4.1-inch cover display.,active
+Smartphones,Xiaomi 17 Ultra,5499.00,13,3,Leica quad camera with a 1-inch main sensor. Snapdragon 8 Elite.,active
+Smartphones,Xiaomi 17 Pro,4199.00,21,3,"Leica triple camera, 6.7-inch LTPO AMOLED, 90W wired charging.",active
+Smartphones,Xiaomi 17,3299.00,28,3,"Snapdragon 8 Elite, 6.36-inch AMOLED, 5400mAh battery.",active
+Smartphones,Google Pixel 10 Pro XL,5799.00,10,3,"Tensor G5, 6.8-inch Super Actua display, seven years of updates.",active
+Smartphones,Google Pixel 10 Pro,4999.00,12,3,Tensor G5 with a 6.3-inch display and the full Pro camera system.,active
+Smartphones,Google Pixel 10,3599.00,19,3,"Tensor G5, 6.3-inch Actua display, dual rear camera.",active
+Smartphones,OPPO Find X8 Pro,4699.00,11,3,"Hasselblad quad camera, dual periscope telephoto, 6.78-inch AMOLED.",active
+Smartphones,vivo X200 Pro,4899.00,8,3,"ZEISS APO telephoto, 200MP periscope, 6.78-inch AMOLED.",active
+Smartphones,OnePlus 13,3799.00,16,3,"Snapdragon 8 Elite, 6.82-inch QHD+ AMOLED, 6000mAh battery.",active
+Smartphones,Nothing Phone (3),2799.00,14,3,"Glyph interface, 6.7-inch AMOLED, Snapdragon 8s Gen 4.",active
+Smartphones,Honor Magic 7 Pro,4499.00,7,3,"6.8-inch LTPO OLED, 5850mAh silicon-carbon battery.",active
+Smartphones,Samsung Galaxy A56,1899.00,45,5,"6.7-inch Super AMOLED, Exynos 1580, IP67 rated.",active
+Smartphones,Xiaomi Redmi Note 14 Pro+,1699.00,52,6,"200MP camera, 120W HyperCharge, 6.67-inch AMOLED.",active
+Smartphones,Samsung Galaxy A36,1399.00,60,7,6.7-inch Super AMOLED with a 5000mAh battery.,active
+Smartphones,Xiaomi Redmi 14C,549.00,88,11,Entry-level handset with a 6.88-inch display and 5160mAh battery.,active
+Smartphones,Samsung Galaxy A16,799.00,70,8,"6.7-inch Super AMOLED, six years of security updates.",active
+Smartphones,iPhone 16,3899.00,24,3,"A18 chip, 48MP Fusion camera, Camera Control button.",active
+Smartphones,iPhone 16e,2699.00,30,3,A18 chip in the most affordable current iPhone. 48MP camera.,active
+Smartphones,Samsung Galaxy S24 FE,2499.00,0,3,"6.7-inch AMOLED, Exynos 2400e. Currently out of stock.",active
+Smartphones,Xiaomi Poco F7 Pro,2199.00,33,4,"Snapdragon 8 Gen 3, 6.67-inch AMOLED, 6000mAh battery.",active
+Smartphones,Nokia 3210 (2024),249.00,40,5,"Reissue of the classic. 4G, MP3 player, Snake.",inactive
+Tablets,iPad Pro 13-inch (M5),7199.00,7,3,Ultra Retina XDR tandem OLED display with the M5 chip.,active
+Tablets,iPad Pro 11-inch (M5),5399.00,9,3,"Ultra Retina XDR OLED, M5 chip, Apple Pencil Pro support.",active
+Tablets,iPad Air 13-inch (M3),3899.00,12,3,Liquid Retina display with the M3 chip.,active
+Tablets,iPad (A16),1799.00,26,3,"11-inch Liquid Retina display, A16 chip, 128GB base storage.",active
+Tablets,iPad mini (A17 Pro),2299.00,15,3,"8.3-inch Liquid Retina, A17 Pro, Apple Pencil Pro support.",active
+Tablets,Samsung Galaxy Tab S11 Ultra,6299.00,5,3,14.6-inch AMOLED 2X with S Pen included.,active
+Tablets,Samsung Galaxy Tab S11,4199.00,8,3,"11-inch AMOLED 2X, S Pen included, IP68 rated.",active
+Tablets,Samsung Galaxy Tab A9+,999.00,30,3,11-inch display with quad speakers. Good value for media.,active
+Tablets,Xiaomi Pad 7 Pro,1899.00,18,3,"11.2-inch 3.2K display, Snapdragon 8s Gen 3.",active
+Wearables,Apple Watch Series 11,1899.00,22,3,"Wide-angle OLED display, sleep apnoea notifications, 18-hour battery.",active
+Wearables,Apple Watch Ultra 3,3699.00,8,3,"49mm titanium case, 5G, depth gauge, 42-hour battery.",active
+Wearables,Apple Watch SE 3,1099.00,35,4,Retina display with crash detection and sleep tracking.,active
+Wearables,Samsung Galaxy Watch 8,1399.00,20,3,"Sapphire crystal, BioActive sensor, Wear OS 6.",active
+Wearables,Samsung Galaxy Watch Ultra,2799.00,6,3,"Titanium case, 10ATM water resistance, dual-frequency GPS.",active
+Wearables,Garmin Forerunner 275,1799.00,11,3,Multi-band GPS running watch with an AMOLED display.,active
+Wearables,Xiaomi Smart Band 10,199.00,120,15,"1.72-inch AMOLED, 21-day battery, 150+ sport modes.",active
+Wearables,Huawei Band 10,249.00,64,8,Slim tracker with SpO2 and sleep tracking.,active
+Audio,AirPods Pro 3,1199.00,40,5,"Active noise cancellation, live translation, heart-rate sensing.",active
+Audio,AirPods 4 (ANC),899.00,45,5,Open-fit earbuds with active noise cancellation.,active
+Audio,AirPods Max (USB-C),2599.00,9,3,Over-ear headphones with computational audio.,active
+Audio,Samsung Galaxy Buds 4 Pro,999.00,33,4,Adaptive ANC with 24-bit Hi-Fi audio.,active
+Audio,Sony WH-1000XM6,1899.00,14,3,"Industry-leading noise cancellation, 30-hour battery.",active
+Audio,Sony WF-1000XM5,1299.00,17,3,Compact ANC earbuds with LDAC support.,active
+Audio,Bose QuietComfort Ultra Earbuds,1499.00,10,3,Immersive Audio with CustomTune calibration.,active
+Audio,JBL Tune 770NC,449.00,38,4,"Adaptive noise cancelling over-ear headphones, 70-hour battery.",active
+Accessories,Anker 140W GaN Charger,329.00,55,6,"Four ports, PD 3.1, charges a laptop and two phones at once.",active
+Accessories,Anker 20000mAh Power Bank,249.00,72,9,140W output with a built-in display.,active
+Accessories,USB-C to USB-C Cable 2m (240W),69.90,180,22,Braided cable rated for 240W and USB 3.2 data speeds.,active
+Accessories,MagSafe Charger 25W,219.00,48,6,Faster wireless charging for iPhone 16 and 17.,active
+Accessories,Apple Pencil Pro,629.00,20,3,"Squeeze, barrel roll and haptic feedback.",active
+Accessories,Samsung 45W Travel Adapter,119.00,90,11,Super Fast Charging 2.0 with a USB-C cable included.,active
+Accessories,Spigen Rugged Armor Case,89.90,140,17,Shock-absorbent TPU case with a carbon fibre texture.,active
+Accessories,Tempered Glass Screen Protector,39.90,300,37,9H hardness with an oleophobic coating. Two per pack.,active
+Accessories,65W GaN Dual-Port Charger,129.00,4,3,Compact charger with one USB-C and one USB-A port.,active
+Accessories,Samsung 256GB microSD Evo Select,89.00,110,13,U3 V30 card rated for 4K video.,active

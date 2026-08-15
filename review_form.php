@@ -65,6 +65,10 @@ if (is_post()) {
             add_err('rating', $ex->getMessage());
         }
     }
+    // Validation failed. Answer with a redirect rather than a page, so
+    // the browser's history entry is a GET and F5 cannot resubmit.
+    // The errors and what was typed are carried across the redirect.
+    redirect_back();
 }
 
 $title = ($isEdit ? 'Edit' : 'Write') . ' a Review - ' . APP_NAME;

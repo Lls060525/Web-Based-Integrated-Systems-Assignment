@@ -17,6 +17,10 @@ if (is_post()) {
     $action = post('action');
 
     if ($action === 'update_cart') {
+        // The no-JavaScript path. With JS the quantity box talks to
+        // api/cart_update.php instead and this form is never submitted,
+        // but it stays because a cart that only works with JS is a cart
+        // that sometimes does not work.
         $quantities = $_POST['quantities'] ?? [];
 
         if (is_array($quantities)) {
@@ -24,25 +28,11 @@ if (is_post()) {
                 $cartId = filter_var($cartId, FILTER_VALIDATE_INT);
                 $qty    = filter_var($qty, FILTER_VALIDATE_INT);
 
-                if ($cartId === false || $qty === false || $qty < 1) {
+                if ($cartId === false || $qty === false) {
                     continue;
                 }
 
-                // Ownership check is part of the WHERE clause, so one member
-                // can never touch another member's cart line.
-                $stock = db_value(
-                    'SELECT p.stock
-                       FROM cart c JOIN products p ON p.id = c.product_id
-                      WHERE c.id = ? AND c.user_id = ?',
-                    [$cartId, $userId]
-                );
-
-                if ($stock !== false) {
-                    db_exec(
-                        'UPDATE cart SET quantity = ? WHERE id = ? AND user_id = ?',
-                        [min($qty, (int)$stock), $cartId, $userId]
-                    );
-                }
+                cart_set_quantity($userId, $cartId, $qty);
             }
         }
 
@@ -61,37 +51,12 @@ if (is_post()) {
 }
 
 // ---------- Load the cart ----------
-$hasOptions = db_column_exists('cart', 'options_signature');
-$sigColumn  = $hasOptions ? 'c.options_signature' : "'' AS options_signature";
-
-$items = db_all(
-    "SELECT c.id AS cart_id, c.quantity, $sigColumn,
-            p.id AS product_id, p.name, p.price, p.image, p.stock
-       FROM cart c
-       JOIN products p ON p.id = c.product_id
-      WHERE c.user_id = ?
-      ORDER BY c.added_at DESC",
-    [$userId]
-);
-
-$totalPrice = 0;
-$totalItems = 0;
-
-foreach ($items as $index => $item) {
-    // The label and the price adjustment are recomputed from the
-    // current options rather than cached on the line, so an admin
-    // changing a price delta shows up before checkout, not after.
-    $chosen = spec_describe_signature((int)$item['product_id'], (string)$item['options_signature']);
-
-    $unitPrice = (float)$item['price'] + $chosen['delta'];
-
-    $items[$index]['options_label'] = $chosen['label'];
-    $items[$index]['options_valid'] = $chosen['valid'];
-    $items[$index]['unit_price']    = $unitPrice;
-
-    $totalPrice += $unitPrice * $item['quantity'];
-    $totalItems += $item['quantity'];
-}
+// Shared with api/cart_update.php, so the numbers the AJAX response
+// sends back are produced by the same code that rendered the page.
+$cart       = cart_load($userId);
+$items      = $cart['items'];
+$totalPrice = $cart['total_price'];
+$totalItems = $cart['total_items'];
 
 include __DIR__ . '/includes/header.php';
 ?>
@@ -119,6 +84,26 @@ include __DIR__ . '/includes/header.php';
 
                 <div class="card cart-items-card">
                     <table class="cart-table">
+                        <?php
+                            /* Column widths live here rather than in CSS.
+                             *
+                             * The header's first cell is colspan="2", so the
+                             * header row has five cells over six columns. Any
+                             * CSS rule that sizes columns by :nth-child sizes
+                             * the HEADER cells, not the columns -- "Unit Price"
+                             * would pick up the width meant for the product
+                             * name and every heading would sit over the wrong
+                             * data. <colgroup> addresses real columns, so
+                             * colspan cannot confuse it. */
+                        ?>
+                        <colgroup>
+                            <col class="col-thumb">
+                            <col class="col-product">
+                            <col class="col-unit">
+                            <col class="col-qty">
+                            <col class="col-subtotal">
+                            <col class="col-remove">
+                        </colgroup>
                         <thead>
                             <tr>
                                 <th colspan="2">Product</th>
@@ -162,13 +147,20 @@ include __DIR__ . '/includes/header.php';
                                     <?php endif; ?>
                                 </td>
                                 <td data-label="Quantity">
+                                    <?php /* data-last-quantity is what the cart actually holds.
+                                             The box can be emptied while a new number is being
+                                             typed, and this is what it goes back to if the
+                                             member clicks away without finishing. */ ?>
                                     <input type="number"
                                            name="quantities[<?= (int)$item['cart_id'] ?>]"
                                            value="<?= (int)$item['quantity'] ?>"
                                            min="1" max="<?= (int)$item['stock'] ?>"
+                                           data-cart-id="<?= (int)$item['cart_id'] ?>"
+                                           data-last-quantity="<?= (int)$item['quantity'] ?>"
                                            class="qty-input update-qty-trigger">
                                 </td>
-                                <td class="cell-price" data-label="Subtotal"><?= e(money($subtotal)) ?></td>
+                                <td class="cell-price" data-label="Subtotal"
+                                    data-line-total="<?= (int)$item['cart_id'] ?>"><?= e(money($subtotal)) ?></td>
                                 <td>
                                     <button type="button"
                                             class="btn-outline btn-sm btn-danger js-submit-form"
@@ -197,11 +189,11 @@ include __DIR__ . '/includes/header.php';
 
                 <div class="summary-row">
                     <span>Total Items:</span>
-                    <strong><?= $totalItems ?></strong>
+                    <strong data-cart-total-items><?= $totalItems ?></strong>
                 </div>
                 <div class="summary-row summary-total">
                     <span>Total Price:</span>
-                    <strong class="price"><?= e(money($totalPrice)) ?></strong>
+                    <strong class="price" data-cart-total-price><?= e(money($totalPrice)) ?></strong>
                 </div>
 
                 <?php $shipTo = default_address($userId); ?>

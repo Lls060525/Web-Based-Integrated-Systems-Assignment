@@ -429,10 +429,141 @@ $(function () {
         $profileEmail.on('input', checkProfileChanges);
     }
 
-    /* ---------- Cart: quantity change and item removal ---------- */
+    /* ---------- Cart: quantity change ---------- */
+    /* This used to submit the whole form, which meant a full page load
+     * for one digit. Three separate movements came out of that: the
+     * scroll position reset, a "Cart updated." banner appeared at the
+     * top and pushed the page down, and the table re-laid itself out.
+     *
+     * Now the server is asked for the new numbers and they are written
+     * into the cells that already exist. Nothing is inserted, nothing is
+     * removed, so nothing moves.
+     *
+     * Every figure comes from the response. Working the totals out in
+     * JavaScript would be faster to write and would eventually disagree
+     * with what checkout charges. */
 
-    $('.update-qty-trigger').on('change', function () {
-        $('#updateCartForm').trigger('submit');
+    var qtyTimers   = {};
+    var qtySeq      = 0;
+    var qtyRendered = 0;
+
+    /* The last value the SERVER confirmed for this line.
+     *
+     * Needed because the box can be left in a state the server never
+     * saw: clearing it to type a new number leaves it empty, and an
+     * empty box has no number to fall back to on its own. Seeded from
+     * the rendered value in data-last-quantity. */
+    function lastQuantity($input) {
+        var last = parseInt($input.attr('data-last-quantity'), 10);
+
+        return isNaN(last) || last < 1 ? 1 : last;
+    }
+
+    function updateCartQuantity($input) {
+        var cartId   = $input.data('cart-id');
+        var quantity = parseInt($input.val(), 10);
+
+        // Nothing usable typed yet. Deliberately does NOT correct the box
+        // here -- somebody clearing it in order to type "12" is mid-edit,
+        // and rewriting the field under their cursor would fight them.
+        // The blur handler below tidies up once they have finished.
+        if (!cartId || isNaN(quantity) || quantity < 1) { return; }
+
+        var $row    = $input.closest('tr');
+        var $total  = $('[data-line-total="' + cartId + '"]');
+        var mySeq   = ++qtySeq;
+
+        $row.addClass('is-updating');
+
+        $.ajax({
+            url: '/api/cart_update.php',
+            type: 'POST',
+            dataType: 'json',
+            data: {
+                cart_id: cartId,
+                quantity: quantity,
+                csrf_token: $('meta[name="csrf-token"]').attr('content')
+            }
+        }).done(function (res) {
+            // A slow earlier request must not overwrite a faster later
+            // one. Same guard as the admin live search.
+            if (mySeq < qtyRendered) { return; }
+            qtyRendered = mySeq;
+
+            if (res.status !== 'ok') {
+                showToast(res.message || 'Could not update the quantity.', 'error');
+                return;
+            }
+
+            $total.text(res.line_total);
+            $('[data-cart-total-price]').text(res.total_price);
+            $('[data-cart-total-items]').text(res.total_items);
+            $('.cart-count').text(res.cart_count);
+
+            // The server may have reduced the number to what is actually
+            // in stock. Write it back so the box agrees with the total
+            // beside it, and say why -- silently changing what someone
+            // typed is worse than the extra message.
+            if (res.quantity !== quantity) {
+                $input.val(res.quantity);
+            }
+
+            // Remember what was actually saved, so an empty box can be
+            // restored to it rather than guessed at.
+            $input.attr('data-last-quantity', res.quantity);
+
+            if (res.clamped && res.message) {
+                showToast(res.message, 'error');
+            }
+
+        }).fail(function () {
+            // Fall back to the old full-page submit rather than leaving
+            // the member looking at a number that was never saved.
+            showToast('Could not reach the server. Reloading your cart.', 'error');
+            $('#updateCartForm').trigger('submit');
+
+        }).always(function () {
+            $row.removeClass('is-updating');
+        });
+    }
+
+    $('.update-qty-trigger').on('change input', function () {
+        var $input = $(this);
+        var cartId = $input.data('cart-id');
+
+        // Holding down a spinner arrow fires an event per step. Without
+        // this, going from 1 to 8 would send eight requests and the
+        // totals would flicker through seven wrong values on the way.
+        window.clearTimeout(qtyTimers[cartId]);
+
+        qtyTimers[cartId] = window.setTimeout(function () {
+            updateCartQuantity($input);
+        }, 350);
+    });
+
+    /* Leaving the box empty is a dead end without this.
+     *
+     * Selecting the contents and deleting them is how most people start
+     * typing a new number, so an empty box has to be allowed WHILE the
+     * field has focus. But if they then click away -- or clear it and
+     * change their mind -- nothing would ever put a number back, and the
+     * line would sit there blank next to a subtotal that no longer
+     * explains itself.
+     *
+     * On blur the box is put back to whatever the server last confirmed,
+     * which is also what the cart is actually holding. Nothing is saved
+     * here: this only makes the field tell the truth again. */
+    $('.update-qty-trigger').on('blur', function () {
+        var $input   = $(this);
+        var quantity = parseInt($input.val(), 10);
+
+        if (isNaN(quantity) || quantity < 1) {
+            // A pending debounce would fire against the restored value
+            // and send a request that changes nothing.
+            window.clearTimeout(qtyTimers[$input.data('cart-id')]);
+
+            $input.val(lastQuantity($input));
+        }
     });
 
     /* ---------- Order cancellation form ---------- */

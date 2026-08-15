@@ -30,24 +30,30 @@ if (is_post()) {
 // ---------- Listing ----------
 $q = get('q');
 
-$sql = "SELECT p.*, c.name AS category_name
-          FROM products p
+// The FROM/WHERE half is built once and used twice: once to count the
+// matching rows so the pager knows how many pages there are, and once to
+// fetch the current page. Sharing it means the two can never drift apart
+// and report a page count that does not match what is listed.
+$from = " FROM products p
           LEFT JOIN categories c ON c.id = p.category_id";
 $params = [];
 
 if ($q !== '') {
-    $sql     .= ' WHERE (p.name LIKE ? OR c.name LIKE ?)';
+    $from    .= ' WHERE (p.name LIKE ? OR c.name LIKE ?)';
     $params[] = '%' . $q . '%';
     $params[] = '%' . $q . '%';
 }
 
-$sql .= ' ORDER BY p.id DESC';
+$pager = paginate((int)db_value('SELECT COUNT(*)' . $from, $params), 20);
 
-$products = db_all($sql, $params);
+$products = db_all(
+    'SELECT p.*, c.name AS category_name' . $from
+        . ' ORDER BY p.id DESC' . pager_limit($pager),
+    $params
+);
 
 if (is_ajax()) {
-    admin_product_rows($products);
-    exit;
+    ajax_rows_with_pager(fn() => admin_product_rows($products), $pager);
 }
 
 include __DIR__ . '/../includes/admin_header.php';
@@ -90,6 +96,8 @@ include __DIR__ . '/../includes/admin_header.php';
                 </tbody>
             </table>
         </div>
+
+        <?php render_pager($pager); ?>
     </div>
 </div>
 

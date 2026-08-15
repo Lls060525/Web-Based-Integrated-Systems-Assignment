@@ -37,6 +37,10 @@ if (count($items) === 0) {
     redirect('/cart.php');
 }
 
+// One query for every line's options, so the loop below prices from
+// memory instead of querying once per chosen attribute.
+spec_prefetch_options(array_column($items, 'product_id'));
+
 $total = 0.0;
 foreach ($items as $index => $item) {
     if ($item['status'] !== 'active') {
@@ -197,6 +201,12 @@ if (is_post() && post('action') === 'place_order') {
             add_err('address_id', 'We could not start the payment session. Please try again in a moment.');
         }
     }
+
+    // Reached only when the order was NOT placed. Answering with a
+    // redirect matters more here than anywhere else on the site: the
+    // browser must never be sitting on a POST to "place_order" that F5
+    // could repeat.
+    redirect_back();
 }
 
 // Pre-select the default address, or whatever was posted.

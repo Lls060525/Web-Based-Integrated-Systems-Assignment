@@ -46,7 +46,9 @@ if (is_file($composerAutoload)) {
 // ---------- Base library ----------
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/helpers.php';
+require_once __DIR__ . '/prg.php';
 require_once __DIR__ . '/ajax.php';
+require_once __DIR__ . '/paginate.php';
 require_once __DIR__ . '/validation.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/auth.php';
@@ -67,8 +69,15 @@ require_once __DIR__ . '/batch.php';
 require_once __DIR__ . '/qrcode.php';
 require_once __DIR__ . '/spec.php';
 require_once __DIR__ . '/store.php';
+require_once __DIR__ . '/cart.php';
 require_once __DIR__ . '/orders.php';
 require_once __DIR__ . '/receipt.php';
+
+// ---------- Replay a failed form submission ----------
+// Picks the validation errors and the submitted values back up after a
+// redirect_back(), so a form can show what went wrong without the page
+// itself being the answer to a POST. See lib/prg.php.
+prg_restore();
 
 // ---------- Remember me ----------
 // Runs after the library is loaded and only when the cookie is

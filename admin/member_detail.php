@@ -168,27 +168,17 @@ include __DIR__ . '/../includes/admin_header.php';
                     <h2>Account Information</h2>
                     <p>System data for this member.</p>
                 </div>
-                <div class="card-body form-standard">
-                    <?php field('detail_id', 'User ID', function () use ($member) {
-                        html_text('detail_id', '#' . $member['id'], ['readonly' => true, 'disabled' => true]);
-                    }); ?>
-
-                    <?php field('detail_name', 'Name', function () use ($member) {
-                        html_text('detail_name', $member['name'], ['readonly' => true, 'disabled' => true]);
-                    }); ?>
-
-                    <?php field('detail_email', 'Email Address', function () use ($member) {
-                        html_text('detail_email', $member['email'], ['readonly' => true, 'disabled' => true]);
-                    }); ?>
-
-                    <?php field('detail_status', 'Account Status', function () use ($member) {
-                        html_text('detail_status', user_status_label($member['status']), ['readonly' => true, 'disabled' => true]);
-                    }); ?>
-
-                    <?php field('detail_created', 'Account Created On', function () use ($member) {
-                        html_text('detail_created', fmt_date($member['created_at'], 'F j, Y, g:i a'), ['readonly' => true, 'disabled' => true]);
-                    }); ?>
-                </div>
+                <?php /* A definition list, not a form. These are values to
+                         read and copy, and nothing here is editable -- see
+                         detail_row() in lib/helpers.php for why the disabled
+                         inputs this replaced were the wrong control. */ ?>
+                <dl class="card-body info-list">
+                    <?php detail_row('User ID', '#' . $member['id'], true); ?>
+                    <?php detail_row('Name', $member['name']); ?>
+                    <?php detail_row('Email Address', $member['email'], true); ?>
+                    <?php detail_row('Account Status', user_status_label($member['status'])); ?>
+                    <?php detail_row('Account Created On', fmt_date($member['created_at'], 'F j, Y, g:i a')); ?>
+                </dl>
             </div>
 
             <?php if (points_module_ready()): ?>
@@ -201,7 +191,8 @@ include __DIR__ . '/../includes/admin_header.php';
                         </p>
                     </div>
                     <div class="card-body">
-                        <table class="admin-table">
+                        <div class="table-responsive">
+                            <table class="admin-table">
                             <thead>
                                 <tr><th>Date</th><th>Activity</th><th>Type</th><th class="text-right">Points</th><th class="text-right">Balance</th></tr>
                             </thead>
@@ -235,6 +226,7 @@ include __DIR__ . '/../includes/admin_header.php';
                             <?php endif; ?>
                             </tbody>
                         </table>
+                        </div>
                     </div>
                 </div>
             <?php endif; ?>
@@ -244,6 +236,7 @@ include __DIR__ . '/../includes/admin_header.php';
                     <h2>Recent Orders</h2>
                 </div>
                 <div class="card-body">
+                    <div class="table-responsive">
                     <table class="admin-table">
                         <thead>
                             <tr>
@@ -266,6 +259,7 @@ include __DIR__ . '/../includes/admin_header.php';
                         <?php endif; ?>
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
 

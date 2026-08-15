@@ -142,6 +142,138 @@ if (is_post()) {
         }
     }
 
+
+    // ---------- Save every edited choice at once ----------
+    //
+    // One button for the whole table rather than one per row. Editing
+    // five options used to mean five submits and five page loads.
+    //
+    // Only rows that actually changed are written, so pressing Save
+    // with nothing edited costs no queries and reports honestly that
+    // nothing changed.
+    if ($action === 'save_all') {
+        $posted = is_array($_POST['options'] ?? null) ? $_POST['options'] : [];
+
+        $existing = [];
+        foreach (db_all(
+            'SELECT o.*, sa.render_style
+               FROM product_spec_options o
+               JOIN spec_attributes sa ON sa.id = o.attribute_id
+              WHERE o.product_id = ?', [$productId]) as $row) {
+            $existing[(int)$row['id']] = $row;
+        }
+
+        $changed = 0;
+        $seenNames = [];
+
+        foreach ($posted as $optionId => $fields) {
+            $optionId = (int)$optionId;
+
+            if (!isset($existing[$optionId]) || !is_array($fields)) {
+                continue;
+            }
+
+            $current = $existing[$optionId];
+            $value   = trim((string)($fields['value_text'] ?? ''));
+            $delta   = trim((string)($fields['price_delta'] ?? '0'));
+
+            if ($value === '') {
+                add_err('opt_' . $optionId, 'A choice needs a name.');
+                continue;
+            }
+
+            if (mb_strlen($value) > 120) {
+                add_err('opt_' . $optionId, '"' . mb_substr($value, 0, 30) . '..." is too long.');
+                continue;
+            }
+
+            if ($delta === '' || !is_numeric($delta) || abs((float)$delta) > 999999) {
+                add_err('opt_' . $optionId, 'The price difference for "' . $value . '" is not a valid number.');
+                continue;
+            }
+
+            // Two rows of the same spec renamed to the same thing would
+            // break the UNIQUE key. Caught here, before anything is
+            // written, so the batch stays all-or-nothing per row.
+            $key = $current['attribute_id'] . '|' . mb_strtolower($value);
+
+            if (isset($seenNames[$key])) {
+                add_err('opt_' . $optionId, '"' . $value . '" is used twice for the same spec.');
+                continue;
+            }
+
+            $seenNames[$key] = true;
+
+            $clash = db_one(
+                'SELECT id FROM product_spec_options
+                  WHERE product_id = ? AND attribute_id = ? AND value_text = ? AND id <> ?',
+                [$productId, $current['attribute_id'], $value, $optionId]
+            );
+
+            if ($clash) {
+                add_err('opt_' . $optionId, '"' . $value . '" already exists for this spec.');
+                continue;
+            }
+
+            $update = [
+                'value_text'  => $value,
+                'price_delta' => round((float)$delta, 2),
+            ];
+
+            if (spec_style_ready()) {
+                $photoId = isset($fields['photo_id']) && $fields['photo_id'] !== ''
+                    ? (int)$fields['photo_id'] : null;
+
+                $update['photo_id'] = $photoId ?: null;
+
+                // The colour is only read for a spec actually drawn as
+                // swatches -- the same rule as adding one.
+                if (spec_render_ready() && ($current['render_style'] ?? 'tile') === 'swatch') {
+                    $swatch = trim((string)($fields['swatch_hex'] ?? ''));
+                    $update['swatch_hex'] = preg_match('~^#[0-9a-fA-F]{6}$~', $swatch) ? $swatch : null;
+                }
+            }
+
+            // Skip rows that are unchanged.
+            $same = true;
+            foreach ($update as $col => $val) {
+                $was = $current[$col] ?? null;
+
+                if ($col === 'price_delta') {
+                    if (abs((float)$was - (float)$val) >= 0.005) { $same = false; break; }
+                } elseif ((string)$was !== (string)$val) {
+                    $same = false; break;
+                }
+            }
+
+            if ($same) {
+                continue;
+            }
+
+            $set    = implode(', ', array_map(static fn($c) => "$c = ?", array_keys($update)));
+            $values = array_values($update);
+            $values[] = $optionId;
+            $values[] = $productId;
+
+            db_exec("UPDATE product_spec_options SET $set WHERE id = ? AND product_id = ?", $values);
+            $changed++;
+        }
+
+        if (no_err()) {
+            flash_success($changed === 0
+                ? 'Nothing had changed.'
+                : $changed . ' choice' . ($changed === 1 ? '' : 's') . ' updated.');
+
+            redirect('/admin/product_options.php?id=' . $productId);
+        }
+
+        // Errors fall through so the page can redraw with them; the rows
+        // that were valid have already been saved.
+        flash_error($changed > 0
+            ? $changed . ' saved, but some rows were rejected. See below.'
+            : 'Nothing was saved. See the errors below.');
+    }
+
     // ---------- Remove one choice ----------
     if ($action === 'delete') {
         $optionId = post_int('option_id');
@@ -187,14 +319,22 @@ if (is_post()) {
         flash_success('Default choice updated.');
         redirect('/admin/product_options.php?id=' . $productId);
     }
+    // Validation failed. Answer with a redirect rather than a page, so
+    // the browser's history entry is a GET and F5 cannot resubmit.
+    // The errors and what was typed are carried across the redirect.
+    redirect_back();
 }
 
 $photoOptions = ['' => 'No photo change'];
 
 if (spec_style_ready() && photo_gallery_ready()) {
     foreach (product_photos($productId) as $i => $photo) {
-        $photoOptions[(int)$photo['id']] = 'Photo ' . ($i + 1)
-            . ($photo['alt_text'] ? ' - ' . $photo['alt_text'] : '');
+        // The admin-given name leads, because that is what identifies the
+        // photo. The index is only a fallback for one that has not been
+        // named yet, and a hint to go and name it.
+        $photoOptions[(int)$photo['id']] = $photo['alt_text'] !== null && $photo['alt_text'] !== ''
+            ? $photo['alt_text']
+            : 'Photo ' . ($i + 1) . ' (unnamed)';
     }
 }
 
@@ -239,6 +379,17 @@ include __DIR__ . '/../includes/admin_header.php';
         </div>
 
     <?php else: ?>
+
+        <?php /* One form for every editable field on this page. It is
+                 declared here, empty, and the inputs join it by id with the
+                 HTML5 form attribute -- a <form> cannot wrap the table
+                 because the table already contains its own small forms, and
+                 forms cannot nest. */ ?>
+        <form action="/admin/product_options.php?id=<?= (int)$productId ?>"
+              method="POST" id="optionsBulk">
+            <?php csrf_field(); ?>
+            <?php html_hidden('action', 'save_all'); ?>
+        </form>
 
         <p class="muted small-note">
             Base price is <strong><?= e(money($product['price'])) ?></strong>.
@@ -300,27 +451,70 @@ include __DIR__ . '/../includes/admin_header.php';
                             </thead>
                             <tbody>
                                 <?php foreach ($rows as $row): ?>
-                                    <?php $delta = (float)$row['price_delta']; ?>
-                                    <?php $live = !spec_style_ready() || (int)($row['is_available'] ?? 1) === 1; ?>
-                                    <tr class="<?= $live ? '' : 'option-sold-out' ?>">
+                                    <?php
+                                        $delta = (float)$row['price_delta'];
+                                        $live  = !spec_style_ready() || (int)($row['is_available'] ?? 1) === 1;
+                                        $oid   = (int)$row['id'];
+                                        $rowKey = 'opt_' . $oid;
+                                        $name  = 'options[' . $oid . ']';
+                                    ?>
+                                    <tr class="<?= $live ? '' : 'option-sold-out' ?><?= has_err($rowKey) ? ' has-error' : '' ?>">
+
+                                        <?php /* The editable fields belong to ONE form for the whole
+                                                 table (#optionsBulk, declared above it) via the HTML5
+                                                 form attribute, so a single Save writes every change.
+                                                 The per-row buttons keep their own small forms, which
+                                                 are siblings of it rather than nested -- a form inside
+                                                 a form is invalid HTML. */ ?>
                                         <td>
-                                            <?php if ($isSwatchGroup && !empty($row['swatch_hex'])): ?>
-                                                <span class="swatch-chip"
-                                                      style="background: <?= e($row['swatch_hex']) ?>"></span>
-                                            <?php endif; ?>
-                                            <strong><?= e($row['value_text']) ?></strong>
+                                            <div class="option-value-cell">
+                                                <?php if ($isSwatchGroup): ?>
+                                                    <input type="color" form="optionsBulk"
+                                                           name="<?= e($name) ?>[swatch_hex]"
+                                                           value="<?= e($row['swatch_hex'] ?: '#888888') ?>"
+                                                           class="option-colour-input"
+                                                           aria-label="Swatch colour for <?= e($row['value_text']) ?>">
+                                                <?php endif; ?>
+
+                                                <input type="text" form="optionsBulk"
+                                                       name="<?= e($name) ?>[value_text]"
+                                                       value="<?= e($row['value_text']) ?>" maxlength="120"
+                                                       class="form-control option-value-input"
+                                                       aria-label="Choice name">
+                                            </div>
+                                            <?php err($rowKey); ?>
                                         </td>
-                                        <td class="text-right <?= $delta > 0 ? 'delta-up' : ($delta < 0 ? 'delta-down' : 'muted') ?>">
-                                            <?= $delta > 0 ? '+' : '' ?><?= e(money($delta)) ?>
+
+                                        <td class="text-right">
+                                            <input type="number" form="optionsBulk"
+                                                   name="<?= e($name) ?>[price_delta]"
+                                                   value="<?= e(number_format($delta, 2, '.', '')) ?>"
+                                                   step="0.01" class="form-control option-delta-input"
+                                                   aria-label="Price difference">
                                         </td>
+
                                         <td class="text-right">
                                             <?= e(money((float)$product['price'] + $delta)) ?>
                                         </td>
 
                                         <?php if (spec_style_ready()): ?>
-                                            <td class="muted small-note">
-                                                <?= e($photoOptions[(int)($row['photo_id'] ?? 0)] ?? 'No photo change') ?>
+                                            <td>
+                                                <?php if (count($photoOptions) > 1): ?>
+                                                    <select form="optionsBulk" name="<?= e($name) ?>[photo_id]"
+                                                            class="form-control option-photo-select"
+                                                            aria-label="Photo shown when this is chosen">
+                                                        <?php foreach ($photoOptions as $value => $label): ?>
+                                                            <option value="<?= e($value) ?>"
+                                                                <?= (string)$value === (string)($row['photo_id'] ?? '') ? 'selected' : '' ?>>
+                                                                <?= e($label) ?>
+                                                            </option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                <?php else: ?>
+                                                    <span class="muted small-note">No photos</span>
+                                                <?php endif; ?>
                                             </td>
+
                                             <td class="text-center">
                                                 <form action="/admin/product_options.php?id=<?= (int)$productId ?>"
                                                       method="POST" class="inline-form">
@@ -337,7 +531,7 @@ include __DIR__ . '/../includes/admin_header.php';
 
                                         <td class="text-center">
                                             <?php if ((int)$row['is_default'] === 1): ?>
-                                                <i class="fas fa-check spec-yes"></i>
+                                                <i class="fas fa-check spec-yes" title="Default choice"></i>
                                             <?php else: ?>
                                                 <form action="/admin/product_options.php?id=<?= (int)$productId ?>"
                                                       method="POST" class="inline-form">
@@ -349,6 +543,7 @@ include __DIR__ . '/../includes/admin_header.php';
                                                 </form>
                                             <?php endif; ?>
                                         </td>
+
                                         <td class="text-right">
                                             <form action="/admin/product_options.php?id=<?= (int)$productId ?>"
                                                   method="POST" class="inline-form"
@@ -403,6 +598,19 @@ include __DIR__ . '/../includes/admin_header.php';
                 </form>
             </div>
         <?php endforeach; ?>
+
+        <?php // One button for the whole page. Editing five choices used to
+              // mean five submits and five page reloads. ?>
+        <div class="bulk-save-bar">
+            <span class="muted small-note">
+                Edit any of the fields above, then save them all together.
+            </span>
+
+            <button type="submit" form="optionsBulk" class="btn-primary"
+                    data-busy="Saving...">
+                Save All Changes
+            </button>
+        </div>
 
     <?php endif; ?>
 </div>

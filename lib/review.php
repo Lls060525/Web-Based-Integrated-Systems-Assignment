@@ -307,36 +307,65 @@ function delete_own_review(int $reviewId, int $userId): void
 // ------------------------------------------------------------
 
 /** Admin listing with the product and author joined in. */
-function all_reviews(string $filter = '', string $search = ''): array
+/**
+ * The FROM/WHERE half of the admin review query, plus its parameters.
+ *
+ * Factored out so the row query and the COUNT(*) that drives the pager
+ * are built from the same clause and cannot drift apart.
+ *
+ * @return array{0:string, 1:array}
+ */
+function review_admin_clause(string $filter = '', string $search = ''): array
 {
-    if (!review_module_ready()) {
-        return [];
-    }
-
-    $sql = "SELECT r.*, p.name AS product_name, p.image, u.name AS author_name, u.email AS author_email
-              FROM reviews r
+    $from = " FROM reviews r
               JOIN products p ON p.id = r.product_id
               JOIN users u ON u.id = r.user_id
              WHERE 1 = 1";
     $params = [];
 
     if (in_array($filter, ['published', 'hidden'], true)) {
-        $sql     .= ' AND r.status = ?';
+        $from    .= ' AND r.status = ?';
         $params[] = $filter;
     } elseif ($filter === 'low') {
-        $sql .= ' AND r.rating <= 2';
+        $from .= ' AND r.rating <= 2';
     }
 
     if ($search !== '') {
-        $sql     .= ' AND (p.name LIKE ? OR u.name LIKE ? OR r.body LIKE ?)';
+        $from    .= ' AND (p.name LIKE ? OR u.name LIKE ? OR r.body LIKE ?)';
         $params[] = '%' . $search . '%';
         $params[] = '%' . $search . '%';
         $params[] = '%' . $search . '%';
     }
 
-    $sql .= ' ORDER BY r.id DESC';
+    return [$from, $params];
+}
 
-    return db_all($sql, $params);
+/** How many reviews match, for the pager. */
+function count_all_reviews(string $filter = '', string $search = ''): int
+{
+    if (!review_module_ready()) {
+        return 0;
+    }
+
+    [$from, $params] = review_admin_clause($filter, $search);
+
+    return (int)db_value('SELECT COUNT(*)' . $from, $params);
+}
+
+/** One page of reviews for the admin moderation table. */
+function all_reviews(string $filter = '', string $search = '', string $limit = ''): array
+{
+    if (!review_module_ready()) {
+        return [];
+    }
+
+    [$from, $params] = review_admin_clause($filter, $search);
+
+    return db_all(
+        'SELECT r.*, p.name AS product_name, p.image, u.name AS author_name, u.email AS author_email'
+            . $from . ' ORDER BY r.id DESC' . $limit,
+        $params
+    );
 }
 
 /** Publish or hide a review, with an optional internal note. */

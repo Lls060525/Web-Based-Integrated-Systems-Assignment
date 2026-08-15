@@ -50,25 +50,29 @@ if (is_post()) {
 // ---------- Listing ----------
 $q = get('q');
 
-$sql = 'SELECT o.*, u.name AS customer_name, u.email AS customer_email
-          FROM orders o
+// FROM/WHERE built once, used for both the count and the page. See the
+// note in admin/products.php.
+$from = ' FROM orders o
           JOIN users u ON u.id = o.user_id';
 $params = [];
 
 if ($q !== '') {
-    $sql     .= ' WHERE (o.id LIKE ? OR u.name LIKE ? OR u.email LIKE ?)';
+    $from    .= ' WHERE (o.id LIKE ? OR u.name LIKE ? OR u.email LIKE ?)';
     $params[] = '%' . $q . '%';
     $params[] = '%' . $q . '%';
     $params[] = '%' . $q . '%';
 }
 
-$sql .= ' ORDER BY o.created_at DESC';
+$pager = paginate((int)db_value('SELECT COUNT(*)' . $from, $params), 20);
 
-$orders = db_all($sql, $params);
+$orders = db_all(
+    'SELECT o.*, u.name AS customer_name, u.email AS customer_email' . $from
+        . ' ORDER BY o.created_at DESC' . pager_limit($pager),
+    $params
+);
 
 if (is_ajax()) {
-    admin_order_rows($orders);
-    exit;
+    ajax_rows_with_pager(fn() => admin_order_rows($orders), $pager);
 }
 
 include __DIR__ . '/../includes/admin_header.php';
@@ -106,6 +110,8 @@ include __DIR__ . '/../includes/admin_header.php';
                 </tbody>
             </table>
         </div>
+
+        <?php render_pager($pager); ?>
     </div>
 </div>
 
