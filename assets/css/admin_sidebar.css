@@ -74,13 +74,9 @@ body {
     z-index: 999;
 }
 
-.toggle-btn {
-    background: none;
-    border: none;
-    font-size: 1.5rem;
-    cursor: pointer;
-    color: #6c757d;
-}
+/* .toggle-btn was declared twice. The later block (further down this
+   file) sets every one of these properties again, so this one was dead
+   -- it has been removed rather than left to look meaningful. */
 
 /* =========================================
    Profile Page Layout (Admin & Member)
