@@ -8,6 +8,8 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+
+require_permission('admins.manage');
 require_once __DIR__ . '/../includes/dropzone.php';
 
 $id     = get_int('id');
@@ -18,13 +20,16 @@ $account = [
     'name'          => '',
     'email'         => '',
     'status'        => 'active',
+    'role_id'       => null,
     'profile_photo' => null,
     'created_at'    => null,
 ];
 
 if ($isEdit) {
+    $roleColumn = role_module_ready() ? 'role_id' : 'NULL AS role_id';
+
     $found = db_one(
-        "SELECT id, name, email, status, profile_photo, created_at
+        "SELECT id, name, email, status, $roleColumn, profile_photo, created_at
            FROM users WHERE id = ? AND role = 'admin'",
         [$id]
     );
@@ -83,6 +88,31 @@ if (is_post()) {
     }
 
     // ---------- Photo ----------
+    // ---------- Role ----------
+    $roleId = null;
+
+    if (role_module_ready()) {
+        $roleId  = post('role_id') === '' ? null : post_int('role_id');
+        $options = role_options();
+
+        if ($roleId !== null && !array_key_exists($roleId, $options)) {
+            add_err('role_id', 'Please choose a role from the list.');
+            $roleId = null;
+        }
+
+        // Somebody removing their own last route back to the role screen.
+        // Checked for the account being edited, not for whoever is doing
+        // the editing -- demoting a colleague can lock everyone out just
+        // as easily as demoting yourself.
+        if ($isEdit) {
+            $lockout = role_assignment_lockout_reason((int)$account['id'], $roleId);
+
+            if ($lockout !== null) {
+                add_err('role_id', $lockout);
+            }
+        }
+    }
+
     $photo    = $account['profile_photo'];
     $newPhoto = save_uploaded_image('profile_photo', DIR_UPLOAD_AVATARS, 'avatar_admin');
 
@@ -96,6 +126,10 @@ if (is_post()) {
                 'UPDATE users SET name = ?, email = ?, status = ?, profile_photo = ? WHERE id = ?',
                 [$name, $email, $status, $photo, $account['id']]
             );
+
+            if (role_module_ready()) {
+                db_exec('UPDATE users SET role_id = ? WHERE id = ?', [$roleId, $account['id']]);
+            }
 
             if ($password !== '') {
                 db_exec(
@@ -111,11 +145,20 @@ if (is_post()) {
 
             flash_success('Administrator "' . $name . '" updated successfully.');
         } else {
-            db_exec(
-                'INSERT INTO users (name, email, password_hash, role, status, profile_photo)
-                 VALUES (?, ?, ?, ?, ?, ?)',
-                [$name, $email, password_hash($password, PASSWORD_DEFAULT), 'admin', $status, $photo]
-            );
+            if (role_module_ready()) {
+                db_exec(
+                    'INSERT INTO users (name, email, password_hash, role, status, role_id, profile_photo)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    [$name, $email, password_hash($password, PASSWORD_DEFAULT),
+                     'admin', $status, $roleId, $photo]
+                );
+            } else {
+                db_exec(
+                    'INSERT INTO users (name, email, password_hash, role, status, profile_photo)
+                     VALUES (?, ?, ?, ?, ?, ?)',
+                    [$name, $email, password_hash($password, PASSWORD_DEFAULT), 'admin', $status, $photo]
+                );
+            }
 
             flash_success('Administrator "' . $name . '" created successfully.');
         }
@@ -176,9 +219,26 @@ include __DIR__ . '/../includes/admin_header.php';
 
             <div class="form-row">
                 <div class="form-col">
-                    <?php field('role_display', 'Role', function () {
-                        html_text('role_display', 'Administrator', ['readonly' => true, 'disabled' => true]);
-                    }); ?>
+                    <?php if (role_module_ready()): ?>
+                        <?php field('role_id', 'Role', function () use ($account) {
+                            html_select(
+                                'role_id',
+                                role_options(),
+                                (string)($account['role_id'] ?? ''),
+                                [],
+                                'No role - can sign in, nothing else'
+                            );
+                            echo '<small class="form-hint">'
+                               . 'Decides which admin pages this account can open. '
+                               . (can_open('/admin/roles.php')
+                                     ? '<a href="/admin/roles.php">Manage roles</a>'
+                                     : '') . '</small>';
+                        }); ?>
+                    <?php else: ?>
+                        <?php field('role_display', 'Role', function () {
+                            html_text('role_display', 'Administrator', ['readonly' => true, 'disabled' => true]);
+                        }); ?>
+                    <?php endif; ?>
                 </div>
 
                 <div class="form-col">

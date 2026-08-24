@@ -182,6 +182,38 @@ $(function () {
         searchTimer = window.setTimeout(function () { runSearch($form); }, 300);
     });
 
+    /* ---------- Role form: permission checkboxes ---------- */
+    /* Select all / clear all, plus a live count. Convenience only -- the
+     * server reads the checkboxes themselves and never looks at which
+     * button was pressed, so nothing here can grant anything. */
+
+    var $permBoxes = $('.js-perm');
+
+    if ($permBoxes.length) {
+        var $permCount = $('.perm-count');
+        var permTotal  = parseInt($permCount.data('total'), 10) || $permBoxes.length;
+
+        function refreshPermCount() {
+            var picked = $permBoxes.filter(':checked').length;
+
+            $permCount.text(picked + ' of ' + permTotal + ' selected');
+        }
+
+        $('.js-perm-all').on('click', function () {
+            $permBoxes.prop('checked', true);
+            refreshPermCount();
+        });
+
+        $('.js-perm-none').on('click', function () {
+            $permBoxes.prop('checked', false);
+            refreshPermCount();
+        });
+
+        $permBoxes.on('change', refreshPermCount);
+
+        refreshPermCount();
+    }
+
     /* ---------- Admin profile tabs ---------- */
 
     var $navItems = $('.profile-nav-item');

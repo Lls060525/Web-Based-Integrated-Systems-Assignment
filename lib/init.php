@@ -52,6 +52,7 @@ require_once __DIR__ . '/paginate.php';
 require_once __DIR__ . '/validation.php';
 require_once __DIR__ . '/security.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/role.php';
 require_once __DIR__ . '/login_guard.php';
 require_once __DIR__ . '/mailer.php';
 require_once __DIR__ . '/address.php';
@@ -71,6 +72,7 @@ require_once __DIR__ . '/spec.php';
 require_once __DIR__ . '/store.php';
 require_once __DIR__ . '/cart.php';
 require_once __DIR__ . '/orders.php';
+require_once __DIR__ . '/cancellation.php';
 require_once __DIR__ . '/receipt.php';
 
 // ---------- Replay a failed form submission ----------

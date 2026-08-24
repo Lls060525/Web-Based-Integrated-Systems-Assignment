@@ -34,8 +34,16 @@ if (!$order) {
 }
 
 // Re-checked on GET and on POST, so a stale tab cannot slip through.
-if (!member_can_cancel($order['status'])) {
-    flash_error(cancel_blocked_reason($order['status']));
+//
+// cancel_request_blocker() rather than member_can_cancel(): it answers
+// the newer question -- may a REQUEST be raised -- which also covers
+// "you already asked and it is still waiting".
+$blocker = cancel_request_ready()
+    ? cancel_request_blocker($order)
+    : (member_can_cancel($order['status']) ? null : cancel_blocked_reason($order['status']));
+
+if ($blocker !== null) {
+    flash_error($blocker);
     redirect('/order_detail.php?id=' . $orderId);
 }
 
@@ -63,19 +71,19 @@ if (is_post()) {
     }
 
     if (no_err()) {
-        try {
-            cancel_order($orderId, 'member', $reason, $note);
+        // Asking, not cancelling. The order carries on exactly as it was
+        // -- still holding its stock -- until an administrator decides.
+        // Returning the stock now would let anyone free up inventory
+        // simply by asking, and it would have to be taken away again if
+        // the request were refused.
+        $result = request_cancellation($order, 'member', $reason, $note);
 
-            flash_success(
-                'Order #' . $orderId . ' has been cancelled. '
-                . 'All items have been returned to stock.'
-            );
+        if ($result['ok']) {
+            flash_success($result['message']);
             redirect('/order_detail.php?id=' . $orderId);
-
-        } catch (\Throwable $e) {
-            error_log('Member order cancellation failed: ' . $e->getMessage());
-            add_err('cancel_reason', 'We could not cancel the order just now. Please try again.');
         }
+
+        add_err('cancel_reason', $result['message']);
     }
     // Validation failed. Answer with a redirect rather than a page, so
     // the browser's history entry is a GET and F5 cannot resubmit.
@@ -83,7 +91,7 @@ if (is_post()) {
     redirect_back();
 }
 
-$title = 'Cancel Order #' . $order['id'] . ' - ' . APP_NAME;
+$title = 'Request cancellation - Order #' . $order['id'] . ' - ' . APP_NAME;
 
 include __DIR__ . '/includes/header.php';
 ?>
@@ -97,13 +105,20 @@ include __DIR__ . '/includes/header.php';
 <div class="cancel-page">
 
     <div class="page-title-row">
-        <h2 class="page-title">Cancel Order #<?= (int)$order['id'] ?></h2>
+        <h2 class="page-title">Request Cancellation &mdash; Order #<?= (int)$order['id'] ?></h2>
     </div>
 
+    <?php /* The wording had to change with the behaviour. It used to say
+             "this cannot be undone", which was true when the button
+             cancelled the order outright and is now simply wrong -- the
+             order carries on until somebody approves. Telling a customer
+             their order is cancelled when it is not is worse than any
+             layout problem. */ ?>
     <div class="alert alert-warning">
-        <strong>This cannot be undone.</strong>
-        Cancelling returns every item to stock and closes the order.
-        If you have already been charged, our support team will handle the refund.
+        <strong>This is a request, not an immediate cancellation.</strong>
+        Your order stays exactly as it is until a member of our team reviews it.
+        You will see the outcome on this order's page. If you have already been
+        charged and the request is approved, our support team handles the refund.
     </div>
 
     <?php err_summary(); ?>
@@ -154,7 +169,8 @@ include __DIR__ . '/includes/header.php';
                     <label for="confirm" class="check-label">
                         <input type="checkbox" name="confirm" id="confirm" value="yes"
                                <?= post('confirm') === 'yes' ? 'checked' : '' ?>>
-                        <span>I understand this order will be cancelled permanently.</span>
+                        <span>I understand this is a request, and that the order
+                              continues until it is approved.</span>
                     </label>
                     <?php err('confirm'); ?>
                 </div>
@@ -163,8 +179,8 @@ include __DIR__ . '/includes/header.php';
                     <a href="/order_detail.php?id=<?= (int)$order['id'] ?>" class="btn-outline">
                         Keep My Order
                     </a>
-                    <?php html_submit('Cancel This Order', ['class' => 'btn-primary btn-danger-solid',
-                                      'data-busy' => 'Cancelling...']); ?>
+                    <?php html_submit('Request Cancellation', ['class' => 'btn-primary btn-danger-solid',
+                                      'data-busy' => 'Sending...']); ?>
                 </div>
             </form>
         </div>

@@ -20,6 +20,7 @@ $layout_avatar = avatar_image($layout_user['profile_photo'] ?? null);
 $layout_page = basename($_SERVER['SCRIPT_NAME']);
 $layout_page = match ($layout_page) {
     'admin_form.php'    => 'admins.php',
+    'role_form.php'     => 'roles.php',
     'voucher_form.php'  => 'vouchers.php',
     'member_detail.php' => 'members.php',
     'category_form.php' => 'categories.php',
@@ -36,23 +37,21 @@ $layout_page = match ($layout_page) {
     default             => $layout_page,
 };
 
-$layout_nav = [
-    'dashboard.php' => ['label' => 'Dashboard',  'icon' => 'fa-chart-line'],
-    'members.php'   => ['label' => 'Members',    'icon' => 'fa-users'],
-    'admins.php'    => ['label' => 'Admins',     'icon' => 'fa-user-shield'],
-    'categories.php'=> ['label' => 'Categories', 'icon' => 'fa-tags'],
-    'products.php'  => ['label' => 'Products',   'icon' => 'fa-box'],
-    'stock.php'     => ['label' => 'Stock',      'icon' => 'fa-boxes-stacked'],
-    'specs.php'     => ['label' => 'Specs',      'icon' => 'fa-list-check'],
-    'stores.php'    => ['label' => 'Stores',     'icon' => 'fa-location-dot'],
-    'batch_import.php' => ['label' => 'Batch Tools', 'icon' => 'fa-layer-group'],
-    'qr_scan.php'   => ['label' => 'Scan QR',    'icon' => 'fa-qrcode'],
-    'orders.php'    => ['label' => 'Orders',     'icon' => 'fa-shopping-cart'],
-    'reviews.php'   => ['label' => 'Reviews',    'icon' => 'fa-star'],
-    'vouchers.php'  => ['label' => 'Vouchers',   'icon' => 'fa-ticket'],
-    'login_attempts.php' => ['label' => 'Login Security', 'icon' => 'fa-shield-halved'],
-    'mail_test.php' => ['label' => 'Mail & PDF',  'icon' => 'fa-envelope-circle-check'],
-];
+// The sidebar is built from admin_areas() in lib/role.php, which is the
+// same list the "page after login" dropdown and admin_landing_url() use.
+// Keeping one list means the menu, the landing page and the permission
+// checks cannot describe three different versions of the panel.
+//
+// Hiding a link is presentation, not security -- the page itself calls
+// require_permission() and refuses regardless of how it was reached.
+// Filtering here exists so the panel does not advertise doors that are
+// locked.
+$layout_nav = [];
+
+foreach (permitted_admin_areas() as $permission => $area) {
+    $layout_nav[basename($area['url'])] = $area;
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -79,15 +78,42 @@ $layout_nav = [
 
 <div class="admin-wrapper">
     <aside class="admin-sidebar" id="sidebar">
-        <a href="/admin/dashboard.php" class="sidebar-brand"><?= e(APP_NAME) ?></a>
+        <?php /* Not a hardcoded /admin/dashboard.php. The logo is "go home",
+                 and home depends on the role -- a Delivery Man clicking it
+                 was being sent to a page their role cannot open. */ ?>
+        <a href="<?= e(admin_landing_url()) ?>" class="sidebar-brand"><?= e(APP_NAME) ?></a>
         <nav class="sidebar-nav">
             <?php foreach ($layout_nav as $file => $item): ?>
                 <a href="/admin/<?= e($file) ?>"
                    class="nav-link<?= $layout_page === $file ? ' active' : '' ?>">
                     <i class="fas <?= e($item['icon']) ?>"></i>
                     <span class="nav-label"><?= e($item['label']) ?></span>
+
+                    <?php /* A queue nobody looks at is a queue that fills up, so
+                             the count is on the menu rather than behind a click.
+                             Only drawn when there is something waiting -- a
+                             permanent "0" trains people to ignore it. */ ?>
+                    <?php if ($file === 'cancellations.php'): ?>
+                        <?php $waiting = pending_cancel_count(); ?>
+                        <?php if ($waiting > 0): ?>
+                            <span class="nav-count" title="<?= (int)$waiting ?> waiting for a decision">
+                                <?= (int)$waiting ?>
+                            </span>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </a>
             <?php endforeach; ?>
+
+            <?php if ($layout_nav === []): ?>
+                <?php /* A role with no permissions. Better to explain the empty
+                         column than to leave the reader wondering whether the
+                         page is broken. */ ?>
+                <p class="sidebar-empty">
+                    Your role has no areas assigned yet.
+                    <a href="/admin/profile.php">Open your profile</a>
+                    or ask a Super Admin for access.
+                </p>
+            <?php endif; ?>
         </nav>
     </aside>
 

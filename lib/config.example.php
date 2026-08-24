@@ -38,6 +38,23 @@ define('URL_IMAGES',          '/assets/images/');
 define('UPLOAD_MAX_SIZE', 2 * 1024 * 1024); // 2 MB
 define('UPLOAD_ALLOWED_MIMES', ['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
 
+// Delivery evidence has its own, larger ceiling.
+//
+// 2 MB is a sensible limit for a product photo somebody chose on a
+// desktop. It is far too small for a picture taken on a phone at a
+// doorstep: a current Android camera produces 3-8 MB, so the driver
+// would do everything right and be told the photograph was missing.
+//
+// The file is downscaled after it is accepted (see EVIDENCE_MAX_EDGE),
+// so the generous limit costs disk only for the moment between upload
+// and resize.
+define('EVIDENCE_MAX_SIZE', 12 * 1024 * 1024); // 12 MB
+
+// Longest edge kept when storing an evidence photo. 1600px is plenty to
+// read a label or see the state of a box, and turns an 8 MB original
+// into roughly 300 KB.
+define('EVIDENCE_MAX_EDGE', 1600);
+
 // ---------- Password reset ----------
 define('RESET_TOKEN_TTL', 3600); // reset link valid for 1 hour (seconds)
 
@@ -107,12 +124,22 @@ define('CANCEL_REASON_REQUIRING_NOTE', 'other');
 // only before dispatch, and a cancelled order can be reinstated.
 //
 // Loosen or tighten the workflow by editing this one map.
+// The workflow is a QUEUE, not a menu.
+//
+// Every order walks pending -> processing -> shipped -> delivered in that
+// order, with no skipping. Allowing pending -> shipped meant an order
+// could be marked posted without anybody having packed it, and the
+// history would show a gap nobody could explain.
+//
+// Cancellation is deliberately NOT in this map. It is no longer a move
+// somebody makes; it is a request an administrator approves, and the
+// approval is what performs the transition. See lib/cancellation.php.
 define('ORDER_STATUS_TRANSITIONS', [
-    'pending'    => ['processing', 'shipped', 'cancelled'],
-    'processing' => ['shipped', 'cancelled'],
+    'pending'    => ['processing'],
+    'processing' => ['shipped'],
     'shipped'    => ['delivered'],
-    'delivered'  => [],                         // final state
-    'cancelled'  => ['pending', 'processing'],  // reinstate a cancelled order
+    'delivered'  => [],            // final state
+    'cancelled'  => ['pending'],   // reinstated orders restart the queue
 ]);
 
 // Statuses that no longer allow any change at all.

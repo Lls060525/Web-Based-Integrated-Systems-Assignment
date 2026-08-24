@@ -5,6 +5,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('categories.manage');
+
 $id     = get_int('id');
 $isEdit = $id !== null;
 

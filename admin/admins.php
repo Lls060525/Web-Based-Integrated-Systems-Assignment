@@ -12,6 +12,8 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+
+require_permission('admins.manage');
 require_once __DIR__ . '/../includes/admin_rows.php';
 
 $title = 'Admin Maintenance - Admin';
@@ -71,26 +73,34 @@ if (is_post()) {
 $q      = get('q');
 $status = get('status');
 
-$sql    = "SELECT id, name, email, status, profile_photo, created_at
-             FROM users
-            WHERE role = 'admin'";
+// The role name is joined in when the module is installed, and stubbed
+// out as NULL when it is not, so the row renderer needs no branch of its
+// own. LEFT JOIN because role_id is allowed to be NULL -- an account
+// with no role must still appear in this list.
+$roleJoin   = role_module_ready() ? 'LEFT JOIN roles r ON r.id = u.role_id' : '';
+$roleSelect = role_module_ready() ? 'r.name AS role_name' : 'NULL AS role_name';
+
+$sql    = "SELECT u.id, u.name, u.email, u.status, u.profile_photo, u.created_at, $roleSelect
+             FROM users u
+             $roleJoin
+            WHERE u.role = 'admin'";
 $params = [];
 
 if ($q !== '') {
-    $sql     .= ' AND (name LIKE ? OR email LIKE ?)';
+    $sql     .= ' AND (u.name LIKE ? OR u.email LIKE ?)';
     $params[] = '%' . $q . '%';
     $params[] = '%' . $q . '%';
 }
 
 if (in_array($status, USER_STATUSES, true)) {
-    $sql     .= ' AND status = ?';
+    $sql     .= ' AND u.status = ?';
     $params[] = $status;
 } else {
     // By default hide deleted accounts; the filter can bring them back.
-    $sql .= " AND status <> 'deleted'";
+    $sql .= " AND u.status <> 'deleted'";
 }
 
-$sql .= ' ORDER BY id ASC';
+$sql .= ' ORDER BY u.id ASC';
 
 $admins = db_all($sql, $params);
 
@@ -147,6 +157,7 @@ include __DIR__ . '/../includes/admin_header.php';
                         <th>Photo</th>
                         <th>Name</th>
                         <th>Email</th>
+                        <th>Role</th>
                         <th>Joined Date</th>
                         <th>Status</th>
                         <th>Action</th>

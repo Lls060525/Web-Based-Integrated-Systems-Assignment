@@ -5,6 +5,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('stores.manage');
+
 $title = 'Store Locations - Admin';
 
 if (!store_module_ready()) {

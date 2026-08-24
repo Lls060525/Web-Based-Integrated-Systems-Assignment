@@ -41,6 +41,21 @@ function csrf_check(): void
     if (!is_post()) {
         return;
     }
+
+    // Checked BEFORE the token, because an over-sized POST has no token
+    // to check -- PHP threw the whole body away. Blaming the session
+    // sends somebody to log in again, which will not help and will not
+    // work the second time either.
+    if (post_exceeded_limit()) {
+        http_response_code(413);
+
+        exit('The data you sent was too large for the server to accept. '
+           . 'PHP\'s post_max_size is currently ' . ini_get('post_max_size')
+           . ' and upload_max_filesize is ' . ini_get('upload_max_filesize')
+           . '. Raise both in ' . (php_ini_loaded_file() ?: 'php.ini')
+           . ' and restart Apache. Nothing was saved.');
+    }
+
     if (!csrf_valid()) {
         http_response_code(419);
         exit('Your session has expired or the request could not be verified. Please go back and try again.');

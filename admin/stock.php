@@ -7,13 +7,17 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+
+require_permission('stock.manage');
 require_once __DIR__ . '/../includes/admin_rows.php';
 
 $title = 'Stock Control - Admin';
 
 if (!stock_module_ready()) {
     flash_error('Stock control is not available yet: run database/migration_13_stock.sql.');
-    redirect('/admin/dashboard.php');
+    // Somewhere this role can actually open, not the dashboard --
+    // otherwise a missing migration bounces them into a 403.
+    redirect(admin_landing_url());
 }
 
 // ---------- Adjustment ----------

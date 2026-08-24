@@ -34,6 +34,9 @@ $orders = db_all(
     $params
 );
 
+// One query for every row's cancellation badge, instead of one per row.
+prefetch_open_cancel_requests(array_column($orders, 'id'));
+
 // ---------- Load every line in one query, then group ----------
 $orderItems = [];
 if (count($orders) > 0) {
@@ -154,9 +157,15 @@ include __DIR__ . '/includes/header.php';
                             Receipt
                         </a>
 
-                        <?php if ($canCancel): ?>
+                        <?php $openRequest = open_cancel_request((int)$order['id']); ?>
+
+                        <?php if ($openRequest !== null): ?>
+                            <span class="badge badge-warning" title="Waiting for a decision">
+                                <i class="fas fa-hourglass-half"></i> Cancellation requested
+                            </span>
+                        <?php elseif ($canCancel): ?>
                             <a href="/order_cancel.php?id=<?= (int)$order['id'] ?>"
-                               class="btn-outline btn-sm btn-danger">Cancel Order</a>
+                               class="btn-outline btn-sm btn-danger">Request Cancellation</a>
                         <?php endif; ?>
                     </div>
                 </div>

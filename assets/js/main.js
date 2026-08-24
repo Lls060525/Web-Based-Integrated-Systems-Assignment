@@ -566,6 +566,99 @@ $(function () {
         }
     });
 
+    /* ---------- Delivery photo lightbox ---------- */
+    /* Opens the photo the driver took, on the customer's own order page.
+     *
+     * The src is set on click rather than in the markup, so a page with
+     * several delivered orders does not download every photograph just
+     * in case somebody looks at one. */
+
+    var $photoModal = $('#photoModal');
+
+    if ($photoModal.length) {
+
+        /* Move the dialog to <body> before anything else.
+         *
+         * It is emitted inside the Order Progress card, which is where it
+         * belongs in the source -- but .card:hover applies
+         * transform: translateY(-4px), and a transformed ancestor becomes
+         * the containing block for position:fixed descendants. The
+         * overlay then stops being fixed to the VIEWPORT and starts being
+         * positioned relative to the card.
+         *
+         * That produced a flicker loop: hovering the card shifted the
+         * overlay 4px, which changed what was under the cursor, which
+         * dropped the hover, which shifted it back, which restored the
+         * hover. Roughly sixty times a second.
+         *
+         * Reparenting is done here rather than by moving the PHP, because
+         * render_photo_modal() can be called from any page and none of
+         * them should have to know which of their wrappers is
+         * transformed. */
+        $photoModal.appendTo(document.body);
+
+        var $photoImage   = $('#photoModalImage');
+        var $photoCaption = $('#photoModalCaption');
+        var $photoOpen    = $('#photoModalOpen');
+        var $lastOpener   = null;
+
+        function openPhotoModal($link) {
+            var url = $link.attr('href');
+
+            $lastOpener = $link;
+
+            $photoImage.attr('src', url);
+            $photoOpen.attr('href', url);
+            $photoCaption.text($link.data('caption') || '');
+
+            $photoModal.prop('hidden', false).attr('aria-hidden', 'false');
+
+            // Stops the page behind scrolling while the dialog is open,
+            // which on a phone is the difference between a dialog and a
+            // confusing overlay.
+            $('body').addClass('modal-open');
+
+            $photoModal.find('.js-photo-close').first().trigger('focus');
+        }
+
+        function closePhotoModal() {
+            $photoModal.prop('hidden', true).attr('aria-hidden', 'true');
+            $('body').removeClass('modal-open');
+
+            // Release the image so a large photo is not held in memory
+            // for the rest of the visit.
+            $photoImage.removeAttr('src');
+
+            // Focus goes back where it came from. Without this a keyboard
+            // user is dropped at the top of the document with no idea
+            // what they just closed.
+            if ($lastOpener) {
+                $lastOpener.trigger('focus');
+                $lastOpener = null;
+            }
+        }
+
+        $(document).on('click', '.js-photo-modal', function (e) {
+            e.preventDefault();
+            openPhotoModal($(this));
+        });
+
+        $photoModal.on('click', '.js-photo-close', closePhotoModal);
+
+        // Clicking the backdrop closes; clicking the dialog does not.
+        $photoModal.on('click', function (e) {
+            if (e.target === this) {
+                closePhotoModal();
+            }
+        });
+
+        $(document).on('keydown', function (e) {
+            if (e.key === 'Escape' && !$photoModal.prop('hidden')) {
+                closePhotoModal();
+            }
+        });
+    }
+
     /* ---------- Order cancellation form ---------- */
     // Choosing "Other reason" makes the note compulsory. The server
     // enforces the same rule; this is only to guide the user.

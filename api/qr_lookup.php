@@ -14,6 +14,13 @@ require_once __DIR__ . '/../lib/init.php';
 // check that used to be copy-pasted into every endpoint.
 ajax_guard_post('admin');
 
+// Same permission as admin/qr_scan.php, the page this endpoint serves.
+// Guarding the page alone would be theatre: the endpoint is what
+// actually returns the order, and it can be called directly.
+if (!can('qr.scan')) {
+    json_error('Your role does not include order scanning.');
+}
+
 $raw = trim(post('value'));
 
 if ($raw === '') {

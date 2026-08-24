@@ -197,6 +197,86 @@ function image_save(\GdImage $image, string $path, string $ext): bool
     };
 }
 
+/**
+ * Shrink an image in place so its longest edge is at most $maxEdge.
+ *
+ * Written for delivery evidence. The upload limit has to be generous --
+ * a phone photo is several megabytes and the driver cannot do anything
+ * about that -- but there is no reason to KEEP several megabytes. A
+ * 1600px copy is enough to read a label or see the state of a box, and
+ * is roughly a twentieth of the size.
+ *
+ * Does nothing when the image is already small enough, and returns true
+ * in that case: "no resize needed" is success, not failure.
+ *
+ * Silently returns false when GD is unavailable. The photograph is
+ * already saved and already valid by that point, so a missing extension
+ * should cost disk space rather than lose the evidence.
+ */
+function downscale_image(string $path, int $maxEdge): bool
+{
+    if (!image_processing_ready() || $maxEdge < 1) {
+        return false;
+    }
+
+    $loaded = image_load($path);
+
+    if ($loaded === null) {
+        return false;
+    }
+
+    [$image, $ext] = $loaded;
+
+    $width  = imagesx($image);
+    $height = imagesy($image);
+    $longest = max($width, $height);
+
+    if ($longest <= $maxEdge) {
+        imagedestroy($image);
+        return true;   // already small enough
+    }
+
+    // Ratio applied to BOTH edges, so the picture is not stretched.
+    // max(1, ...) because a very wide, very short image would otherwise
+    // round its short edge to zero and imagecreatetruecolor would fail.
+    $ratio     = $maxEdge / $longest;
+    $newWidth  = max(1, (int)round($width * $ratio));
+    $newHeight = max(1, (int)round($height * $ratio));
+
+    $resized = imagecreatetruecolor($newWidth, $newHeight);
+
+    if ($resized === false) {
+        imagedestroy($image);
+        return false;
+    }
+
+    // Same transparency handling as image_load(), otherwise a PNG comes
+    // back with black where it used to be see-through.
+    if ($ext === 'png' || $ext === 'webp' || $ext === 'gif') {
+        imagealphablending($resized, false);
+        imagesavealpha($resized, true);
+    }
+
+    // imagecopyresampled, not imagecopyresized: the latter is faster and
+    // produces visibly jagged edges, which on a photo of a parcel label
+    // is the difference between readable and not.
+    $ok = imagecopyresampled(
+        $resized, $image,
+        0, 0, 0, 0,
+        $newWidth, $newHeight,
+        $width, $height
+    );
+
+    if ($ok) {
+        $ok = image_save($resized, $path, $ext);
+    }
+
+    imagedestroy($image);
+    imagedestroy($resized);
+
+    return $ok;
+}
+
 /** A unique name in the same folder, keeping the extension. */
 function image_new_filename(string $prefix, string $ext): string
 {

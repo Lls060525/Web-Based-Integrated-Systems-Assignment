@@ -8,11 +8,15 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('security.view');
+
 $title = 'Login Security - Admin';
 
 if (!login_guard_ready()) {
     flash_error('Login blocking is not available yet: run database/migration_11_login_blocking.sql.');
-    redirect('/admin/dashboard.php');
+    // Somewhere this role can actually open, not the dashboard --
+    // otherwise a missing migration bounces them into a 403.
+    redirect(admin_landing_url());
 }
 
 // ---------- Actions ----------
@@ -142,9 +146,12 @@ include __DIR__ . '/../includes/admin_header.php';
                             <td><strong><?= e($row['email']) ?></strong></td>
                             <td>
                                 <?php if (!empty($row['user_id'])): ?>
-                                    <a href="/admin/member_detail.php?id=<?= (int)$row['user_id'] ?>">
-                                        <?= e($row['user_name']) ?>
-                                    </a>
+                                    <?php /* Reading the security log does not imply being allowed
+                                             to open member accounts. The name still matters -- it
+                                             is who the locked account belongs to -- so it degrades
+                                             to plain text rather than disappearing. */ ?>
+                                    <?php admin_link('/admin/member_detail.php?id=' . (int)$row['user_id'],
+                                                     $row['user_name']); ?>
                                 <?php else: ?>
                                     <span class="muted">No such account</span>
                                 <?php endif; ?>

@@ -9,6 +9,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('products.manage');
+
 $productId = get_int('id');
 
 if ($productId === null) {
@@ -201,7 +203,9 @@ include __DIR__ . '/../includes/admin_header.php';
 
         <div class="admin-header-actions">
             <a href="/product_detail.php?id=<?= (int)$productId ?>" class="btn-outline">View on Store</a>
-            <a href="/admin/specs.php" class="btn-outline">Manage Attributes</a>
+            <?php if_can_open('/admin/specs.php', function () {
+                    admin_link('/admin/specs.php', 'Manage Attributes', ['class' => 'btn-outline']);
+                }); ?>
         </div>
     </div>
 
@@ -229,7 +233,7 @@ include __DIR__ . '/../includes/admin_header.php';
             </p>
             <p class="muted">
                 You can add one just for this product using the form below, or define one
-                for the whole category from <a href="/admin/specs.php">Specs</a>.
+                for the whole category from <?php admin_link('/admin/specs.php', 'Specs'); ?>.
             </p>
         </div>
 
@@ -351,7 +355,7 @@ include __DIR__ . '/../includes/admin_header.php';
             <p class="muted small-note">
                 This one belongs to <strong><?= e($product['name']) ?></strong> only. Other
                 products in the same category will not grow an empty field for it. Use
-                <a href="/admin/specs.php">Specs</a> instead if you want it on the whole category.
+                <?php admin_link('/admin/specs.php', 'Specs'); ?> instead if you want it on the whole category.
             </p>
 
             <form action="/admin/product_specs.php?id=<?= (int)$productId ?>"

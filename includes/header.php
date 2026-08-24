@@ -128,7 +128,9 @@ if (is_member()) {
                     </a>
 
                 <?php elseif (is_admin()): ?>
-                    <a href="/admin/dashboard.php">
+                    <?php /* Same reasoning as the sidebar logo: where the admin
+                             area "starts" is a property of the role. */ ?>
+                    <a href="<?= e(admin_landing_url()) ?>">
                         <i class="fas fa-gauge-high" aria-hidden="true"></i>
                         <span class="nav-label">Admin Panel</span>
                     </a>

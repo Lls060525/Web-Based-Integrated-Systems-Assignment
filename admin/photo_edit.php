@@ -8,6 +8,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('products.manage');
+
 $photoId   = get_int('photo');
 $productId = get_int('product');
 

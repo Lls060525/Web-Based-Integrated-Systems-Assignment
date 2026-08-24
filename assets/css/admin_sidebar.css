@@ -38,7 +38,14 @@ body {
 .admin-sidebar .nav-link {
     color: #c2c7d0;
     padding: 12px 20px;
-    display: block;
+
+    /* flex, not block: the cancellation count badge is pushed to the far
+       right with margin-left:auto, which does nothing inside a block.
+       The icon keeps its own margin-right, so the label still sits where
+       it did. */
+    display: flex;
+    align-items: center;
+
     text-decoration: none;
     transition: background 0.2s, color 0.2s;
 }
@@ -475,4 +482,32 @@ body {
     .profile-nav-item { flex: 1 1 100%; }
 
     .bar-chart { min-width: 380px; }
+}
+
+/* Shown when the signed-in admin's role grants no areas at all. Without
+   it the sidebar is simply blank, which reads as a broken page rather
+   than a permissions problem. */
+.sidebar-empty {
+    padding: 16px 20px;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, .65);
+}
+.sidebar-empty a { color: #fff; text-decoration: underline; }
+
+/* Count of cancellation requests waiting for a decision. Pushed to the
+   right of the label with margin-left:auto so it sits against the edge
+   whatever the label's length. */
+.nav-link .nav-count {
+    margin-left: auto;
+    min-width: 20px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    line-height: 18px;
 }

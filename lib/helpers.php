@@ -521,8 +521,13 @@ function avatar_image(?string $file): string
  * Returns the new file name on success, or null on failure
  * (the reason is recorded against $key via add_err()).
  */
-function save_uploaded_image(string $key, string $targetDir, string $prefix): ?string
+function save_uploaded_image(string $key, string $targetDir, string $prefix, ?int $maxSize = null): ?string
 {
+    // Per-call ceiling. A product photo chosen on a desktop and a
+    // photograph taken at a doorstep are not the same kind of file, and
+    // one limit for both means one of them is wrong.
+    $maxSize = $maxSize ?? UPLOAD_MAX_SIZE;
+
     if (!isset($_FILES[$key]) || $_FILES[$key]['error'] === UPLOAD_ERR_NO_FILE) {
         return null; // nothing uploaded - not an error by itself
     }
@@ -530,12 +535,16 @@ function save_uploaded_image(string $key, string $targetDir, string $prefix): ?s
     $file = $_FILES[$key];
 
     if ($file['error'] !== UPLOAD_ERR_OK) {
-        add_err($key, 'Upload failed. Please try again.');
+        // Say WHICH failure. "Upload failed, please try again" invites
+        // somebody to try the same 6 MB photo four more times.
+        add_err($key, upload_error_message($file['error'], $maxSize));
         return null;
     }
 
-    if ($file['size'] > UPLOAD_MAX_SIZE) {
-        add_err($key, 'File size must not exceed ' . (UPLOAD_MAX_SIZE / 1024 / 1024) . ' MB.');
+    if ($file['size'] > $maxSize) {
+        add_err($key, 'That image is '
+            . round($file['size'] / 1024 / 1024, 1) . ' MB. The limit is '
+            . round($maxSize / 1024 / 1024, 1) . ' MB.');
         return null;
     }
 
@@ -577,6 +586,107 @@ function save_uploaded_image(string $key, string $targetDir, string $prefix): ?s
     }
 
     return $filename;
+}
+
+/**
+ * Turn a PHP upload error code into something worth reading.
+ *
+ * UPLOAD_ERR_INI_SIZE is the one that matters. It means the file was
+ * bigger than php.ini's upload_max_filesize, which sits ABOVE anything
+ * this application can configure -- raising EVIDENCE_MAX_SIZE does
+ * nothing if php.ini still says 2M. XAMPP ships with 2M, so a phone
+ * photo hits it immediately, and the message has to name the file to
+ * edit or the reader has no way to know.
+ */
+function upload_error_message(int $code, int $appLimit): string
+{
+    switch ($code) {
+        case UPLOAD_ERR_INI_SIZE:
+            $ini = php_ini_loaded_file();
+
+            return 'The file is larger than PHP itself allows ('
+                 . ini_get('upload_max_filesize') . '). This is a server setting, '
+                 . 'not an application one: raise upload_max_filesize and post_max_size'
+                 . ($ini ? ' in ' . $ini : ' in php.ini')
+                 . ', then restart Apache.';
+
+        case UPLOAD_ERR_FORM_SIZE:
+            return 'The file is larger than this form allows ('
+                 . round($appLimit / 1024 / 1024, 1) . ' MB).';
+
+        case UPLOAD_ERR_PARTIAL:
+            return 'Only part of the file arrived. This usually means the '
+                 . 'connection dropped -- please try again.';
+
+        case UPLOAD_ERR_NO_TMP_DIR:
+            return 'The server has no temporary folder configured for uploads.';
+
+        case UPLOAD_ERR_CANT_WRITE:
+            return 'The server could not write the file to disk.';
+
+        case UPLOAD_ERR_EXTENSION:
+            return 'A PHP extension stopped the upload.';
+
+        default:
+            return 'Upload failed (error code ' . $code . '). Please try again.';
+    }
+}
+
+/**
+ * Did PHP discard this POST for exceeding post_max_size?
+ *
+ * When the request body is larger than post_max_size, PHP does not
+ * report an error -- it silently throws away $_POST AND $_FILES and
+ * carries on. Every downstream check then sees an empty form:
+ *
+ *   csrf_valid()  -> false -> "your session has expired"
+ *   $_FILES       -> empty -> "a photograph is required"
+ *
+ * Both messages are wrong, and both send the reader somewhere useless.
+ * The tell is a POST that announced a Content-Length but arrived with
+ * nothing in it.
+ *
+ * post_max_size must be larger than upload_max_filesize, because the
+ * body carries the file PLUS the other fields. Raising only one of them
+ * is the usual mistake.
+ */
+function post_exceeded_limit(): bool
+{
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        return false;
+    }
+
+    if ($_POST !== [] || $_FILES !== []) {
+        return false;   // something arrived, so it was not discarded
+    }
+
+    return (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 0;
+}
+
+/** post_max_size in bytes, or 0 when it cannot be read. */
+function post_max_bytes(): int
+{
+    return php_size_to_bytes((string)ini_get('post_max_size'));
+}
+
+/** Turn a php.ini shorthand size ("8M", "512K", "1G") into bytes. */
+function php_size_to_bytes(string $value): int
+{
+    $value = trim($value);
+
+    if ($value === '') {
+        return 0;
+    }
+
+    $unit   = strtolower($value[strlen($value) - 1]);
+    $number = (int)$value;
+
+    return match ($unit) {
+        'g'     => $number * 1024 * 1024 * 1024,
+        'm'     => $number * 1024 * 1024,
+        'k'     => $number * 1024,
+        default => $number,
+    };
 }
 
 /** Delete a previously uploaded file, ignoring the placeholders. */

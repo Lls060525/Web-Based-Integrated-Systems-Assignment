@@ -4,6 +4,8 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+
+require_permission('products.manage');
 require_once __DIR__ . '/../includes/dropzone.php';
 
 $productId = get_int('id');
@@ -250,7 +252,8 @@ include __DIR__ . '/../includes/admin_header.php';
         <?php if (count($categories) === 0): ?>
             <div class="alert alert-info">
                 There are no categories yet.
-                <a href="/admin/category_form.php">Create one first</a> so products can be classified.
+                <?php admin_link('/admin/category_form.php', 'Create one first'); ?>
+                        so products can be classified.
             </div>
         <?php endif; ?>
 
@@ -288,7 +291,9 @@ include __DIR__ . '/../includes/admin_header.php';
                         html_number('stock', $product['stock'], ['min' => '0', 'required' => true]);
                         if ($isEdit) {
                             echo '<small class="form-hint">Changing this records a correction in the '
-                               . '<a href="/admin/stock.php">stock ledger</a>.</small>';
+                               . (can_open('/admin/stock.php')
+                                 ? '<a href="/admin/stock.php">stock ledger</a>'
+                                 : 'stock ledger') . '.</small>';
                         }
                     }, true); ?>
                 </div>

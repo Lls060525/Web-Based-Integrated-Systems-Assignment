@@ -9,6 +9,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('mail.test');
+
 $title = 'E-Receipt Diagnostics - Admin';
 
 $testResult = null;
@@ -93,6 +95,22 @@ $checks = [
         'hint'  => gd_hint(),
     ],
     [
+        // The one that catches people out on a phone demo. XAMPP ships
+        // with upload_max_filesize = 2M, and a camera photo is 3-8 MB,
+        // so delivery evidence fails with a message about the session
+        // rather than about the file.
+        'label' => 'Upload limits large enough for a phone photo',
+        'ok'    => php_size_to_bytes((string)ini_get('upload_max_filesize')) >= EVIDENCE_MAX_SIZE
+                && post_max_bytes() > php_size_to_bytes((string)ini_get('upload_max_filesize')),
+        'hint'  => 'upload_max_filesize is ' . ini_get('upload_max_filesize')
+                 . ' and post_max_size is ' . ini_get('post_max_size')
+                 . '. Delivery evidence needs upload_max_filesize of at least '
+                 . round(EVIDENCE_MAX_SIZE / 1024 / 1024) . 'M, and post_max_size must be '
+                 . 'LARGER than that because the body carries the file plus the form fields. '
+                 . 'Set both in ' . (php_ini_loaded_file() ?: 'php.ini')
+                 . ' and restart Apache.',
+    ],
+    [
         'label' => 'CAPTCHA driver working (' . CAPTCHA_DRIVER . ')',
         'ok'    => !captcha_enabled() || captcha_ready(),
         'hint'  => captcha_status(),
@@ -151,7 +169,10 @@ include __DIR__ . '/../includes/admin_header.php';
 <div class="admin-container admin-container-narrow">
     <div class="admin-header">
         <h2>E-Receipt Diagnostics</h2>
-        <a href="/admin/orders.php" class="btn-outline">&larr; Back to Orders</a>
+        <?php if_can_open('/admin/orders.php', function () {
+                    admin_link('/admin/orders.php', '&larr; Back to Orders',
+                               ['class' => 'btn-outline'], true);
+                }); ?>
     </div>
 
     <?php err_summary(); ?>

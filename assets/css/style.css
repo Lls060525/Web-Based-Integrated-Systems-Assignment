@@ -4373,3 +4373,343 @@ button.is-busy::after {
   .bulk-save-bar { flex-direction: column; align-items: stretch; }
   .bulk-save-bar .btn-primary { width: 100%; }
 }
+
+/* The role name on the admins listing. Neutral colouring on purpose:
+   the status badge beside it carries green/red, and two coloured badges
+   in one row compete for the same attention. */
+.badge-role {
+  background: #eef1f6;
+  color: #3d4757;
+  border: 1px solid var(--border);
+}
+
+/* ============================================================
+   Roles and permissions (Manage Roles module)
+   ============================================================ */
+
+/* The permission chips on the roles listing. Grouped by area so a role
+   reads as "everything in Catalogue" rather than a flat wall of names. */
+.perm-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.perm-area {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+.perm-chips .perm-area:first-child { margin-left: 0; }
+.perm-chip {
+  display: inline-block;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f7f8fa;
+  font-size: 12px;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
+/* ---------- The permission picker ---------- */
+.perm-head { border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 6px; }
+.perm-bulk { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.perm-count { margin-left: auto; }
+
+/* auto-fit rather than a fixed column count: the areas come from the
+   database, so the number of boxes is not known when this is written.
+   min() stops the track from exceeding the container on a narrow phone,
+   which is what forces a horizontal scrollbar. */
+.perm-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.perm-area-box {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px 6px;
+  margin: 0;
+  min-width: 0;   /* lets a long label wrap instead of widening the grid */
+}
+.perm-area-box legend {
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Matching the specificity of .form-group label, which sets display:block
+   and would otherwise stretch the checkbox across the whole row -- the
+   same trap this project hit with the remember-me checkbox. */
+.form-standard .perm-item.check-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 0;
+  font-weight: 400;
+  cursor: pointer;
+}
+.form-standard .perm-item.check-label input[type="checkbox"] {
+  width: auto;
+  margin: 3px 0 0;
+  flex-shrink: 0;
+}
+.perm-item .form-hint { display: block; margin-top: 2px; }
+
+/* ---------- The read-only summary further down the edit page ---------- */
+.role-granted { padding: 0; }
+.role-holders { list-style: none; padding: 0; margin: 10px 0 0; }
+.role-holders li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.role-holders li:last-child { border-bottom: 0; }
+
+/* ---------- "Your role" panel on the admin profile ---------- */
+/* .card-padded already supplies the padding, so the list inside must not
+   add its own -- .info-list is written for a card that has none. */
+.role-summary { margin-bottom: 20px; }
+.role-summary .info-list { padding: 0; }
+.role-summary .info-row:last-child { padding-bottom: 14px; }
+.role-summary .perm-chips { margin-top: 8px; }
+
+/* A link the reader's role cannot follow, rendered as plain text.
+   Deliberately NOT greyed out to near-invisibility: the text is still
+   information -- a customer name, a product name -- and only the
+   navigation has gone. The dotted underline hints there was a link
+   here without inviting a click. */
+.link-denied {
+  color: var(--text-main);
+  border-bottom: 1px dotted var(--border);
+  cursor: default;
+}
+
+/* A dashboard tile whose shortcut has been removed. Keeps the card, but
+   drops the hover lift that promises it is clickable. */
+.stat-tile.is-static { cursor: default; }
+.stat-tile.is-static:hover { transform: none; box-shadow: 0 1px 4px rgba(0,0,0,0.05); }
+
+/* ---------- The 403 page require_permission() renders ---------- */
+.permission-denied { text-align: center; }
+.permission-denied .section-heading { margin-top: 0; }
+.permission-denied .btn-primary { display: inline-block; }
+
+@media (max-width: 600px) {
+  .perm-grid { gap: 12px; }
+  .perm-area-box { padding: 12px 13px 4px; }
+  .perm-count { margin-left: 0; width: 100%; }
+}
+
+/* ============================================================
+   Order fulfilment: status actions and evidence photos
+   ============================================================ */
+
+/* One card per available move, rather than a dropdown. A dropdown could
+   not carry a file input that appears only for some choices -- the field
+   would have to exist for every option and be ignored for most. */
+.status-actions { margin-top: 6px; }
+
+.status-action-form {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+  background: #fbfcfd;
+}
+.status-action-form:last-of-type { margin-bottom: 6px; }
+
+.status-action-head { margin-bottom: 10px; }
+.status-action-arrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.status-action-arrow strong { color: var(--text-main); }
+.status-action-arrow i { font-size: 11px; }
+
+/* The file input is the one field that must not be missed, so it gets
+   the only coloured border on the card. */
+.evidence-field input[type="file"] {
+  border: 1px dashed var(--primary);
+  background: #fff;
+  padding: 10px;
+  cursor: pointer;
+}
+.evidence-field .req { color: var(--primary); }
+
+/* ---------- The photo in the timeline ---------- */
+.timeline-evidence { margin: 10px 0 0; }
+.timeline-evidence img {
+  display: block;
+  max-width: 220px;
+  width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.timeline-evidence figcaption { margin-top: 5px; }
+
+@media (max-width: 600px) {
+  .status-action-form { padding: 12px 13px; }
+
+  /* Full width on a phone: this is the driver's main screen, and the
+     photo is the thing they came to look at. */
+  .timeline-evidence img { max-width: 100%; }
+}
+
+/* ---------- The cancellation approval queue ---------- */
+.cancel-request-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+.cancel-request-head .section-heading { margin: 0 0 4px; }
+
+.cancel-request-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+.cancel-request-total { font-size: 18px; font-weight: 700; color: var(--primary); }
+
+.cancel-request .info-list { padding: 14px 0; }
+
+.cancel-request-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* The order moved on while the request waited, so approving it is no
+   longer possible. Dimmed rather than hidden -- it still needs a
+   decision, just only one of the two. */
+.cancel-request.is-stale { border-left: 3px solid var(--border); }
+
+/* The staff-side "request cancellation" block sits under the forward
+   moves and must not look like one of them. */
+.status-action-form.is-cancel {
+  background: #fffaf9;
+  border-color: #f0d3cd;
+  margin-top: 18px;
+}
+
+@media (max-width: 600px) {
+  .cancel-request-figures { align-items: flex-start; flex-direction: row; }
+  .cancel-request-actions { flex-direction: column-reverse; }
+  .cancel-request-actions button { width: 100%; }
+}
+
+/* ---------- Delivery photo: the link in the member timeline ---------- */
+/* Blue and underlined on purpose. Everything else in the timeline is
+   plain text, so the one thing that DOES something has to look unlike
+   the things that do not. */
+.timeline-photo-link { margin: 8px 0 0; }
+.timeline-photo-link a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #1668c1;
+  text-decoration: underline;
+}
+.timeline-photo-link a:hover { color: #0d4f99; }
+.timeline-photo-link i { font-size: 13px; }
+
+/* ---------- The lightbox ---------- */
+.photo-modal {
+  /* If this ever ends up back inside a transformed element the JS
+     reparenting has failed, and it is better to notice than to flicker.
+     isolation creates a stacking context of its own so at least the
+     z-index behaves; the reparenting in main.js is the real fix. */
+  isolation: isolate;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.photo-modal[hidden] { display: none; }
+
+.photo-dialog {
+  background: var(--white);
+  border-radius: 8px;
+  width: 100%;
+  max-width: 560px;
+
+  /* The dialog never exceeds the viewport, and the BODY scrolls rather
+     than the whole dialog -- so the close button stays reachable on a
+     tall portrait photo. */
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.photo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+}
+.photo-head h3 { margin: 0; font-size: 16px; }
+
+.photo-close {
+  background: none;
+  border: 0;
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0 4px;
+}
+.photo-close:hover { color: var(--text-main); }
+
+.photo-body {
+  padding: 16px 18px;
+  overflow-y: auto;
+  text-align: center;
+}
+.photo-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+.photo-caption { margin: 10px 0 0; }
+
+.photo-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 600px) {
+  .photo-modal { padding: 10px; }
+  .photo-dialog { max-height: 94vh; }
+  .photo-foot { flex-direction: column-reverse; }
+  .photo-foot > * { width: 100%; text-align: center; }
+}

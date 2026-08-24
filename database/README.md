@@ -56,6 +56,10 @@ existing order, so old sample data can produce a receipt too.
 | `migration_22_render_style.sql` | Display style becomes an explicit setting; clears stray swatches |
 | `migration_23_stores.sql` | The `stores` table, plus 5 sample branches with real coordinates |
 | `migration_24_indexes.sql` | Indexes for the six original-schema tables. **Safe to re-run** |
+| `migration_25_roles.sql` | Roles, permissions and `users.role_id`. **Safe to re-run** |
+| `migration_26_role_landing.sql` | Per-role landing page after login. **Safe to re-run** |
+| `migration_27_fulfilment.sql` | Per-transition permissions, evidence photos, Vendor and Delivery Man roles. **Safe to re-run** |
+| `migration_28_cancel_approval.sql` | Cancellation becomes a request an admin approves. **Safe to re-run** |
 
 **phpMyAdmin stops at the first error.** If you have already run part of a file,
 re-running the whole thing halts at *"Duplicate column name"* and never reaches the
@@ -66,6 +70,12 @@ the one you still need rather than the whole thing again.
 before every `ADD INDEX`, so running it twice — or on a database that already
 happens to have some of these indexes — does nothing the second time rather than
 stopping. Run it last, after the schema is otherwise complete.
+
+`migration_25_roles.sql` is written the same way and can also be re-run safely.
+It creates three tables, adds `users.role_id`, seeds sixteen permissions and
+three roles, and — importantly — **gives every existing administrator the Super
+Admin role**. Without that last step the permission checks would go live with
+nobody holding any permission, and the whole panel would lock at once.
 
 ## Important: ENUM values are lowercase
 

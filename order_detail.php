@@ -136,14 +136,42 @@ include __DIR__ . '/includes/header.php';
             </div>
 
             <?php if ($order['status'] !== 'cancelled'): ?>
+                <?php $openRequest = open_cancel_request((int)$order['id']); ?>
+                <?php $lastRequest = cancel_request_history((int)$order['id'])[0] ?? null; ?>
+
                 <h3 class="side-heading">Need to cancel?</h3>
 
-                <?php if ($canCancel): ?>
+                <?php if ($openRequest !== null): ?>
+                    <?php /* The most important state to show clearly. Somebody
+                             who has asked and hears nothing will ask again, or
+                             assume it is done and be surprised by a parcel. */ ?>
+                    <div class="alert alert-warning">
+                        <strong>Cancellation requested.</strong>
+                        Sent <?= e(fmt_datetime($openRequest['created_at'])) ?>.
+                        We are reviewing it &mdash; your order continues as normal
+                        until a decision is made.
+                    </div>
+
+                <?php elseif ($lastRequest !== null && $lastRequest['status'] === 'rejected'): ?>
+                    <div class="alert alert-error">
+                        <strong>Your cancellation request was not approved.</strong>
+                        <?php if (!empty($lastRequest['decision_note'])): ?>
+                            <div class="mt-2"><?= nl2br(e($lastRequest['decision_note'])) ?></div>
+                        <?php endif; ?>
+                    </div>
+                    <?php if ($canCancel): ?>
+                        <a href="/order_cancel.php?id=<?= (int)$order['id'] ?>"
+                           class="btn-outline btn-danger btn-block">Ask Again</a>
+                    <?php endif; ?>
+
+                <?php elseif ($canCancel): ?>
                     <p class="muted small-note">
-                        You can still cancel this order because it has not been shipped yet.
+                        This order has not shipped yet, so you can ask us to cancel it.
+                        A member of our team reviews every request.
                     </p>
                     <a href="/order_cancel.php?id=<?= (int)$order['id'] ?>"
-                       class="btn-outline btn-danger btn-block">Cancel This Order</a>
+                       class="btn-outline btn-danger btn-block">Request Cancellation</a>
+
                 <?php else: ?>
                     <p class="muted small-note"><?= e(cancel_blocked_reason($order['status'])) ?></p>
                 <?php endif; ?>

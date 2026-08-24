@@ -67,7 +67,7 @@ if (!function_exists('admin_empty_row')) {
     function admin_admin_rows(array $admins): void
     {
         if (count($admins) === 0) {
-            admin_empty_row(7, 'No administrators found.');
+            admin_empty_row(8, 'No administrators found.');
             return;
         }
 
@@ -94,6 +94,16 @@ if (!function_exists('admin_empty_row')) {
                     <?php endif; ?>
                 </td>
                 <td><?= e($a['email']) ?></td>
+                <td>
+                    <?php if (!empty($a['role_name'])): ?>
+                        <span class="badge badge-role"><?= e($a['role_name']) ?></span>
+                    <?php else: ?>
+                        <?php /* NULL role_id. The account can sign in and reach its
+                                 own profile, and nothing else -- worth flagging
+                                 rather than showing an empty cell. */ ?>
+                        <span class="muted small-note">No role</span>
+                    <?php endif; ?>
+                </td>
                 <td><?= e(fmt_date($a['created_at'])) ?></td>
                 <td><span class="badge <?= $badge ?>"><?= e(user_status_label($a['status'])) ?></span></td>
                 <td>
@@ -292,7 +302,20 @@ if (!function_exists('admin_empty_row')) {
         }
 
         foreach ($orders as $o):
-            $nextOptions = next_status_options($o['status']);
+            // Moves that need a photograph are not offered here: this row
+            // has no file input, and admin/orders.php refuses them anyway.
+            // Listing them would be inviting a refusal.
+            $nextOptions = array_filter(
+                next_status_options($o['status']),
+                static fn(string $status): bool => !transition_needs_evidence($status),
+                ARRAY_FILTER_USE_KEY
+            );
+
+            $needsPhoto = array_filter(
+                next_status_options($o['status']),
+                'transition_needs_evidence',
+                ARRAY_FILTER_USE_KEY
+            );
             ?>
             <tr>
                 <td><strong>#<?= (int)$o['id'] ?></strong></td>
@@ -309,8 +332,21 @@ if (!function_exists('admin_empty_row')) {
                     <div class="row-actions">
                         <a href="/admin/order_detail.php?id=<?= (int)$o['id'] ?>" class="btn-outline btn-sm">View</a>
 
-                        <?php if (count($nextOptions) === 0): ?>
-                            <span class="muted small-note">Workflow complete</span>
+                        <?php if (count($nextOptions) === 0 && count($needsPhoto) === 0): ?>
+                            <span class="muted small-note">
+                                <?= count(allowed_next_statuses($o['status'])) === 0
+                                    ? 'Workflow complete'
+                                    : 'Not yours to move' ?>
+                            </span>
+
+                        <?php elseif (count($nextOptions) === 0): ?>
+                            <?php /* The only moves left need a photograph, which
+                                     this row cannot collect. Say where to go. */ ?>
+                            <span class="muted small-note" title="Needs a photograph">
+                                <i class="fas fa-camera"></i>
+                                Open the order
+                            </span>
+
                         <?php else: ?>
                             <form action="/admin/orders.php" method="POST" class="inline-form">
                                 <?php csrf_field(); ?>

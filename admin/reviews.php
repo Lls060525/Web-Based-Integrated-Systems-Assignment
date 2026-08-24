@@ -8,13 +8,17 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+
+require_permission('reviews.manage');
 require_once __DIR__ . '/../includes/review_parts.php';
 
 $title = 'Review Moderation - Admin';
 
 if (!review_module_ready()) {
     flash_error('Reviews are not available yet: run database/migration_14_reviews.sql.');
-    redirect('/admin/dashboard.php');
+    // Somewhere this role can actually open, not the dashboard --
+    // otherwise a missing migration bounces them into a 403.
+    redirect(admin_landing_url());
 }
 
 // ---------- Moderation ----------
@@ -147,9 +151,11 @@ include __DIR__ . '/../includes/admin_header.php';
                         <span class="muted small-note"><?= e($r['author_email']) ?></span>
                         <span class="muted small-note"><?= e(fmt_datetime($r['created_at'])) ?></span>
                         <?php if (!empty($r['order_id'])): ?>
-                            <a href="/admin/order_detail.php?id=<?= (int)$r['order_id'] ?>" class="small-note">
-                                Order #<?= (int)$r['order_id'] ?>
-                            </a>
+                            <?php /* Which order the review is about is worth knowing even
+                                     to somebody who may not open it. */ ?>
+                            <?php admin_link('/admin/order_detail.php?id=' . (int)$r['order_id'],
+                                             'Order #' . (int)$r['order_id'],
+                                             ['class' => 'small-note']); ?>
                         <?php endif; ?>
                     </div>
 

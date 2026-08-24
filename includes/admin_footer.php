@@ -14,6 +14,16 @@
 // render_webcam_modal() prints itself once and then no-ops.
 require_once __DIR__ . '/webcam.php';
 render_webcam_modal();
+
+// The delivery-photo lightbox, for the same reason and in the same place.
+//
+// It MUST be emitted here rather than beside the link that opens it. A
+// position:fixed overlay stops being fixed to the viewport if any
+// ancestor has a transform, and .card:hover sets one -- which turned the
+// dialog into something that jittered whenever the pointer crossed the
+// card it was nested in.
+require_once __DIR__ . '/order_parts.php';
+render_photo_modal();
 ?>
     </div><!-- /.admin-main-content -->
 </div><!-- /.admin-wrapper -->

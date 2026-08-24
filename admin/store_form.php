@@ -9,6 +9,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('stores.manage');
+
 if (!store_module_ready()) {
     flash_error('Run database/migration_23_stores.sql first.');
     redirect('/admin/stores.php');

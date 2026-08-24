@@ -5,6 +5,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('members.manage');
+
 $id = get_int('id');
 
 if ($id === null) {
@@ -253,7 +255,12 @@ include __DIR__ . '/../includes/admin_header.php';
                                     <td><?= e(fmt_datetime($o['created_at'])) ?></td>
                                     <td><?= e(money($o['total_amount'])) ?></td>
                                     <td><span class="status-badge status-<?= e($o['status']) ?>"><?= e(order_status_label($o['status'])) ?></span></td>
-                                    <td><a href="/admin/order_detail.php?id=<?= (int)$o['id'] ?>" class="btn-outline btn-sm">View</a></td>
+                                    <td>
+                                <?php if_can_open('/admin/order_detail.php', function () use ($o) {
+                                    admin_link('/admin/order_detail.php?id=' . (int)$o['id'], 'View',
+                                               ['class' => 'btn-outline btn-sm']);
+                                }); ?>
+                            </td>
                                 </tr>
                             <?php endforeach; ?>
                         <?php endif; ?>

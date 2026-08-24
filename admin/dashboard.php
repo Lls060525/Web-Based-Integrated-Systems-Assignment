@@ -8,6 +8,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('dashboard.view');
+
 $title = 'Dashboard - Admin';
 
 // ---------- Headline figures ----------
@@ -82,27 +84,14 @@ include __DIR__ . '/../includes/admin_header.php';
     </div>
 
     <!-- Headline figures -->
+    <?php /* The first four tiles double as shortcuts. admin_stat_tile()
+             drops the link for a role that cannot open the target and
+             keeps the figure, because the number is the point. */ ?>
     <div class="stat-grid">
-        <a href="/admin/members.php" class="card stat-tile">
-            <span class="stat-icon"><i class="fas fa-users"></i></span>
-            <span class="stat-value"><?= $stats['members'] ?></span>
-            <span class="stat-label">Registered Members</span>
-        </a>
-        <a href="/admin/admins.php" class="card stat-tile">
-            <span class="stat-icon"><i class="fas fa-user-shield"></i></span>
-            <span class="stat-value"><?= $stats['admins'] ?></span>
-            <span class="stat-label">Active Administrators</span>
-        </a>
-        <a href="/admin/stock.php" class="card stat-tile">
-            <span class="stat-icon"><i class="fas fa-box"></i></span>
-            <span class="stat-value"><?= $stats['products'] ?></span>
-            <span class="stat-label">Active Products</span>
-        </a>
-        <a href="/admin/orders.php" class="card stat-tile">
-            <span class="stat-icon"><i class="fas fa-shopping-cart"></i></span>
-            <span class="stat-value"><?= $stats['orders'] ?></span>
-            <span class="stat-label">Orders Placed</span>
-        </a>
+        <?php admin_stat_tile('/admin/members.php', 'fa-users', (string)$stats['members'], 'Registered Members'); ?>
+        <?php admin_stat_tile('/admin/admins.php', 'fa-user-shield', (string)$stats['admins'], 'Active Administrators'); ?>
+        <?php admin_stat_tile('/admin/stock.php', 'fa-box', (string)$stats['products'], 'Active Products'); ?>
+        <?php admin_stat_tile('/admin/orders.php', 'fa-shopping-cart', (string)$stats['orders'], 'Orders Placed'); ?>
         <div class="card stat-tile">
             <span class="stat-icon"><i class="fas fa-coins"></i></span>
             <span class="stat-value"><?= e(money($stats['revenue'])) ?></span>
@@ -180,7 +169,7 @@ include __DIR__ . '/../includes/admin_header.php';
                     <?php foreach ($topProducts as $p): ?>
                         <tr>
                             <td class="cell-thumb"><img src="<?= e(product_image($p['image'])) ?>" alt="" class="table-thumb"></td>
-                            <td><a href="/admin/product_form.php?id=<?= (int)$p['id'] ?>"><?= e($p['name']) ?></a></td>
+                            <td><?php admin_link('/admin/product_form.php?id=' . (int)$p['id'], $p['name']); ?></td>
                             <td class="col-num"><strong><?= (int)$p['sold'] ?></strong></td>
                             <td class="col-money"><?= e(money($p['revenue'])) ?></td>
                         </tr>
@@ -203,7 +192,7 @@ include __DIR__ . '/../includes/admin_header.php';
                 <ul class="alert-list">
                     <?php foreach ($lowStock as $p): ?>
                         <li>
-                            <a href="/admin/product_form.php?id=<?= (int)$p['id'] ?>"><?= e($p['name']) ?></a>
+                            <?php admin_link('/admin/product_form.php?id=' . (int)$p['id'], $p['name']); ?>
                             <span class="badge <?= (int)$p['stock'] === 0 ? 'badge-danger' : 'badge-warning' ?>">
                                 <?= (int)$p['stock'] ?> left
                                 <?php if (reorder_level_ready()): ?>
@@ -239,7 +228,14 @@ include __DIR__ . '/../includes/admin_header.php';
                             <td><?= e(fmt_datetime($o['created_at'])) ?></td>
                             <td><?= e(money($o['total_amount'])) ?></td>
                                             <td><span class="status-badge status-<?= e($o['status']) ?>"><?= e(order_status_label($o['status'])) ?></span></td>
-                            <td><a href="/admin/order_detail.php?id=<?= (int)$o['id'] ?>" class="btn-outline btn-sm">View</a></td>
+                            <td>
+                                <?php /* A button that refuses is worse than no button,
+                                         so this one is hidden rather than flattened. */ ?>
+                                <?php if_can_open('/admin/order_detail.php', function () use ($o) {
+                                    admin_link('/admin/order_detail.php?id=' . (int)$o['id'], 'View',
+                                               ['class' => 'btn-outline btn-sm']);
+                                }); ?>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

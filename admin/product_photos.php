@@ -7,6 +7,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('products.manage');
+
 $productId = get_int('id');
 
 if (!photo_gallery_ready()) {

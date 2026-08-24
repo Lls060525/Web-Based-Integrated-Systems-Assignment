@@ -8,6 +8,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('specs.manage');
+
 $title = 'Specification Attributes - Admin';
 
 if (!spec_module_ready()) {

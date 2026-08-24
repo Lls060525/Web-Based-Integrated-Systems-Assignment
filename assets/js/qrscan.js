@@ -297,6 +297,14 @@ $(function () {
         });
 
         $('#qrOpenOrder').attr('href', data.detail_url);
+
+        // "Update Status" reloads this page onto the scanned order, so the
+        // action panel is rendered server-side from the order's CURRENT
+        // status. Deciding what to offer from the lookup response would
+        // work until two people scanned the same parcel, at which point
+        // one of them would be offered a move that had already happened.
+        $('#qrActOnOrder').attr('href', '/admin/qr_scan.php?order=' + encodeURIComponent(data.id));
+
         $('#qrResult').prop('hidden', false);
     }
 

@@ -4,6 +4,8 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+
+require_permission('products.manage');
 require_once __DIR__ . '/../includes/admin_rows.php';
 
 $title = 'Product Management - Admin';

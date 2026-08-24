@@ -5,6 +5,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('specs.manage');
+
 $attributeId = get_int('id');
 $isEdit      = $attributeId !== null;
 

@@ -9,6 +9,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('products.manage');
+
 $productId = get_int('id');
 
 if ($productId === null) {
@@ -374,7 +376,7 @@ include __DIR__ . '/../includes/admin_header.php';
                 have choices. Add one on the
                 <a href="/admin/product_specs.php?id=<?= (int)$productId ?>">specifications page</a>,
                 or tick the box on an existing attribute under
-                <a href="/admin/specs.php">Specs</a>.
+                <?php admin_link('/admin/specs.php', 'Specs'); ?>.
             </p>
         </div>
 
@@ -423,7 +425,7 @@ include __DIR__ . '/../includes/admin_header.php';
                     <p class="muted small-note">
                         Shown as tiles with the price difference underneath. Only a spec set to
                         <em>Colour swatches</em> under
-                        <a href="/admin/spec_form.php?id=<?= (int)$attribute['id'] ?>">its definition</a>
+                        <?php admin_link('/admin/spec_form.php?id=' . (int)$attribute['id'], 'its definition'); ?>
                         asks for a colour, which is why there is no colour box here.
                     </p>
                 <?php endif; ?>

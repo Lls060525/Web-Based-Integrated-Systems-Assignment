@@ -5,6 +5,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('categories.manage');
+
 $title = 'Category Maintenance - Admin';
 
 // ---------- Delete ----------

@@ -8,6 +8,8 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('batch.manage');
+
 $title = 'Batch Insert Products - Admin';
 
 // ---------- Downloadable template ----------

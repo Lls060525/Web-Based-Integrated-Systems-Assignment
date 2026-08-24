@@ -4,6 +4,8 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+
+require_permission('orders.manage');
 require_once __DIR__ . '/../includes/admin_rows.php';
 
 $title = 'Order Management - Admin';
@@ -27,19 +29,21 @@ if (is_post()) {
             flash_error('The note must not exceed 500 characters.');
 
         } else {
-            try {
-                // One call applies the transition rules, moves the stock
-                // and writes the audit entry. See lib/orders.php.
-                update_order_status($orderId, $newStatus, 'admin', $note);
-                flash_success('Order #' . $orderId . ' is now ' . order_status_label($newStatus) . '.');
+            // The list has no file input, so a move that needs a photograph
+            // is refused here and the person is sent to the order page --
+            // which does have one. Silently allowing it without evidence
+            // would be a hole straight through the rule.
+            if (transition_needs_evidence($newStatus)) {
+                flash_error(order_status_label($newStatus)
+                    . ' needs a photograph, so it cannot be set from the list. '
+                    . 'Open the order, or scan its QR code.');
 
-            } catch (\RuntimeException $ex) {
-                // A rule was broken - the message is meant for the admin.
-                flash_error($ex->getMessage());
+            } else {
+                $result = handle_status_change($orderId, $newStatus, $note);
 
-            } catch (\Throwable $ex) {
-                error_log('Order status update failed: ' . $ex->getMessage());
-                flash_error('Could not update the order. Please try again.');
+                $result['ok']
+                    ? flash_success($result['message'])
+                    : flash_error($result['message']);
             }
         }
     }

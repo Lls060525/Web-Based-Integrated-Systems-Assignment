@@ -4,6 +4,9 @@
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
+
+require_permission('orders.manage');
+require_once __DIR__ . '/../includes/status_actions.php';
 require_once __DIR__ . '/../includes/order_parts.php';
 
 $orderId = get_int('id');
@@ -31,27 +34,45 @@ if (!$order) {
 if (is_post()) {
     csrf_check();
 
-    if (post('action') === 'update_status') {
-        $newStatus = post('status');
-        $note      = post('status_note');
 
-        if ($newStatus === '' || !in_array($newStatus, ORDER_STATUSES, true)) {
+    if (post('action') === 'request_cancel') {
+        $target = db_one('SELECT * FROM orders WHERE id = ?', [post_int('order_id')]);
+
+        if ($target === false || $target === null) {
+            flash_error('That order no longer exists.');
+        } else {
+            $result = request_cancellation($target, 'admin', post('cancel_reason'), post('note'));
+
+            $result['ok']
+                ? flash_success($result['message'])
+                : flash_error($result['message']);
+        }
+
+        redirect('/admin/order_detail.php?id=' . $orderId);
+    }
+
+    // 'advance' is the shared panel's action; 'update_status' is kept so
+    // an old bookmarked form still works.
+    if (post('action') === 'advance' || post('action') === 'update_status') {
+        $newStatus = post('to_status') !== '' ? post('to_status') : post('status');
+        $note      = post('note')      !== '' ? post('note')      : post('status_note');
+
+        if ($newStatus === '') {
             add_err('status', 'Please choose a status.');
         } elseif (mb_strlen($note) > 500) {
             add_err('status_note', 'The note must not exceed 500 characters.');
         } else {
-            try {
-                update_order_status($orderId, $newStatus, 'admin', $note);
-                flash_success('Order #' . $orderId . ' is now ' . order_status_label($newStatus) . '.');
+            // Same call the QR scanner makes. The permission check, the
+            // photo requirement and the upload all live in one place --
+            // see handle_status_change() in lib/orders.php.
+            $result = handle_status_change($orderId, $newStatus, $note);
+
+            if ($result['ok']) {
+                flash_success($result['message']);
                 redirect('/admin/order_detail.php?id=' . $orderId);
-
-            } catch (\RuntimeException $ex) {
-                add_err('status', $ex->getMessage());
-
-            } catch (\Throwable $ex) {
-                error_log('Order status update failed: ' . $ex->getMessage());
-                add_err('status', 'Could not update the order. Please try again.');
             }
+
+            add_err('status', $result['message']);
         }
     }
 
@@ -95,7 +116,13 @@ include __DIR__ . '/../includes/admin_header.php';
                 <p>
                     <strong><?= e($order['customer_name']) ?></strong><br>
                     <a href="mailto:<?= e($order['customer_email']) ?>"><?= e($order['customer_email']) ?></a><br>
-                    <a href="/admin/member_detail.php?id=<?= (int)$order['customer_id'] ?>">View member profile</a>
+                    <?php /* Pure navigation -- the customer's name and email are
+                             already above it. Nothing is lost by hiding it from a
+                             role that handles orders but not member accounts. */ ?>
+                    <?php if_can_open('/admin/member_detail.php', function () use ($order) {
+                        admin_link('/admin/member_detail.php?id=' . (int)$order['customer_id'],
+                                   'View member profile');
+                    }); ?>
                 </p>
 
                 <h3 class="side-heading">Placed On</h3>
@@ -147,27 +174,16 @@ include __DIR__ . '/../includes/admin_header.php';
                         the end of the workflow. Its status can no longer be changed.
                     </p>
                 <?php else: ?>
-                    <form action="/admin/order_detail.php?id=<?= (int)$order['id'] ?>"
-                          method="POST" class="form-standard">
-                        <?php csrf_field(); ?>
-                        <?php html_hidden('action', 'update_status'); ?>
-                        <?php html_hidden('order_id', $order['id']); ?>
+                    <?php if (has_err('status')): ?>
+                        <div class="alert alert-error"><?php err('status'); ?></div>
+                    <?php endif; ?>
 
-                        <?php field('status', 'Move this order to', function () use ($nextOptions) {
-                            html_select('status', $nextOptions, '', ['required' => true],
-                                        '-- Select new status --');
-                        }, true); ?>
-
-                        <?php field('status_note', 'Internal note (optional)', function () {
-                            html_textarea('status_note', '', [
-                                'rows'        => 3,
-                                'maxlength'   => 500,
-                                'placeholder' => 'e.g. courier tracking number, or why it was cancelled',
-                            ]);
-                        }); ?>
-
-                        <?php html_submit('Update Status', ['class' => 'btn-primary btn-block']); ?>
-                    </form>
+                    <?php /* The same panel the QR scanner uses. A dropdown of
+                             every legal next status was fine when one person did
+                             the whole workflow; now that a move can need a
+                             photograph, the choice has to be made before the form
+                             is drawn rather than after it is submitted. */ ?>
+                    <?php render_status_actions($order, '/admin/order_detail.php?id=' . (int)$order['id']); ?>
 
                     <p class="muted small-note mt-2">
                         Allowed next steps:

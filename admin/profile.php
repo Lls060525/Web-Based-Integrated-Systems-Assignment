@@ -152,13 +152,78 @@ include __DIR__ . '/../includes/admin_header.php';
                 <h2 class="content-title">My Profile</h2>
                 <p class="content-subtitle">Manage your account personal information.</p>
 
+                <?php /* Your role, read from the database.
+                 *
+                 * This used to be a readonly input containing the literal
+                 * string "Administrator", so it said the same thing no matter
+                 * which role the account carried -- it never queried anything.
+                 *
+                 * It also sits OUTSIDE the form now. It is not an editable
+                 * field: an admin must not be able to change their own role,
+                 * or the whole permission model is decoration. Leaving it in
+                 * the form implied otherwise. */ ?>
+                <?php if (role_module_ready()): ?>
+                    <?php $myRoleName = current_role_name(); ?>
+
+                    <div class="card card-padded role-summary">
+                        <dl class="info-list">
+                            <?php detail_row('Role', $myRoleName ?? 'No role assigned'); ?>
+                        </dl>
+
+                        <?php if ($myRoleName === null): ?>
+                            <p class="muted small-note">
+                                Your account has no role, so the admin panel is closed to
+                                you apart from this page. Ask a Super Admin to assign one.
+                            </p>
+                        <?php else: ?>
+                            <?php
+                                // Grouped by area, the same way the Roles screen
+                                // presents it, so the two read alike.
+                                $myRoleId = (int)db_value(
+                                    'SELECT role_id FROM users WHERE id = ?',
+                                    [current_user_id()]
+                                );
+                                $myGrants = role_permissions_grouped($myRoleId);
+                            ?>
+
+                            <?php if ($myGrants === []): ?>
+                                <p class="muted small-note">
+                                    This role has no permissions attached yet.
+                                </p>
+                            <?php else: ?>
+                                <p class="muted small-note">This role gives you access to:</p>
+                                <div class="perm-chips">
+                                    <?php foreach ($myGrants as $area => $rows): ?>
+                                        <span class="perm-area"><?= e($area) ?>:</span>
+                                        <?php foreach ($rows as $row): ?>
+                                            <span class="perm-chip"><?= e($row['label']) ?></span>
+                                        <?php endforeach; ?>
+                                    <?php endforeach; ?>
+                                </div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+
+                        <p class="muted small-note mt-2">
+                            Only an administrator with the <strong>Roles</strong> permission
+                            can change this
+                            <?php if (can('roles.manage')): ?>
+                                &mdash; <a href="/admin/roles.php">manage roles</a>.
+                            <?php else: ?>
+                                &mdash; ask a Super Admin if you need different access.
+                            <?php endif; ?>
+                        </p>
+                    </div>
+                <?php endif; ?>
+
                 <form action="/admin/profile.php?tab=profile" method="POST" class="form-standard">
                     <?php csrf_field(); ?>
                     <?php html_hidden('action', 'update_profile'); ?>
 
-                    <?php field('role_display', 'Role', function () {
-                        html_text('role_display', 'Administrator', ['readonly' => true, 'disabled' => true]);
-                    }); ?>
+                    <?php if (!role_module_ready()): ?>
+                        <?php field('role_display', 'Role', function () {
+                            html_text('role_display', 'Administrator', ['readonly' => true, 'disabled' => true]);
+                        }); ?>
+                    <?php endif; ?>
 
                     <?php field('name', 'Full Name', function () use ($user) {
                         html_text('name', $user['name'], ['required' => true, 'maxlength' => 100]);

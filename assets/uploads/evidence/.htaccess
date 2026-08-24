@@ -1,0 +1,12 @@
+# Delivery evidence photos.
+#
+# These are not public product images: they show a customer's parcel and,
+# on a delivery photo, often their doorstep. The directory is blocked
+# entirely and the files are served through admin/evidence.php, which
+# checks the viewer is allowed to see that order first.
+Require all denied
+
+<IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+</IfModule>

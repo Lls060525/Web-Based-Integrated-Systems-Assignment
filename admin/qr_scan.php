@@ -12,7 +12,76 @@
 
 require_once __DIR__ . '/admin_auth.php';
 
+require_permission('qr.scan');
+require_once __DIR__ . '/../includes/status_actions.php';
+
 $title = 'Scan QR Code - Admin';
+
+// ---------- Act on a scanned order ----------
+//
+// A normal form POST rather than AJAX. The lookup stays AJAX because
+// looking is cheap and instant matters at a counter; ACTING carries a
+// photograph and changes the order, so it goes through the same
+// Post/Redirect/Get path as every other write on the site. F5 after
+// marking a parcel shipped must not offer to ship it again.
+if (is_post()) {
+    csrf_check();
+
+    if (post('action') === 'advance') {
+        $orderId   = post_int('order_id');
+        $newStatus = post('to_status');
+
+        if ($orderId === null) {
+            flash_error('That order could not be identified. Please scan again.');
+        } else {
+            $result = handle_status_change($orderId, $newStatus, post('note'));
+
+            $result['ok']
+                ? flash_success($result['message'])
+                : flash_error($result['message']);
+
+            // Straight back to the same order so the new status is
+            // visible without scanning the code a second time.
+            redirect('/admin/qr_scan.php?order=' . $orderId);
+        }
+    }
+
+
+    if (post('action') === 'request_cancel') {
+        $target = db_one('SELECT * FROM orders WHERE id = ?', [post_int('order_id')]);
+
+        if ($target === false || $target === null) {
+            flash_error('That order no longer exists.');
+        } else {
+            $result = request_cancellation($target, 'admin', post('cancel_reason'), post('note'));
+
+            $result['ok']
+                ? flash_success($result['message'])
+                : flash_error($result['message']);
+        }
+
+        redirect('/admin/qr_scan.php?order=' . (int)post_int('order_id'));
+    }
+
+    redirect('/admin/qr_scan.php');
+}
+
+// ---------- An order to show on load ----------
+//
+// Set after acting, so the result of the change is on screen. Also lets
+// the page be opened straight onto an order from a link.
+$scanned = null;
+$openId  = get_int('order');
+
+if ($openId !== null) {
+    $scanned = db_one(
+        'SELECT o.*, u.name AS customer_name, u.email AS customer_email
+           FROM orders o
+           JOIN users u ON u.id = o.user_id
+          WHERE o.id = ?',
+        [$openId]
+    ) ?: null;
+}
 
 include __DIR__ . '/../includes/admin_header.php';
 ?>
@@ -106,10 +175,46 @@ include __DIR__ . '/../includes/admin_header.php';
                 <ul class="qr-items" id="qrItems"></ul>
 
                 <div class="form-actions">
-                    <a href="#" class="btn-primary" id="qrOpenOrder">Open Full Order</a>
+                    <?php /* Only offered to somebody who can open the order page.
+                             A Delivery Man has qr.scan without orders.manage. */ ?>
+                    <?php if (can_open('/admin/order_detail.php')): ?>
+                        <a href="#" class="btn-primary" id="qrOpenOrder">Open Full Order</a>
+                    <?php endif; ?>
+
+                    <?php /* Reloads the page onto this order, which renders the
+                             action panel server-side. The panel needs the order's
+                             CURRENT status to decide what to offer, and the
+                             scanner only has what the lookup returned -- asking
+                             the server is the version that cannot go stale. */ ?>
+                    <a href="#" class="btn-outline" id="qrActOnOrder">Update Status</a>
                 </div>
             </div>
         </div>
+
+        <?php if ($scanned !== null): ?>
+            <?php /* Rendered from the database, not from the scan. Landing here
+                     after a status change means the panel reflects what was just
+                     saved rather than what was on screen a moment ago. */ ?>
+            <div class="card card-padded qr-act-card">
+                <div class="qr-act-head">
+                    <div>
+                        <span class="qr-result-receipt"><?= e(receipt_number($scanned)) ?></span>
+                        <span class="badge status-badge status-<?= e($scanned['status']) ?>">
+                            <?= e(order_status_label($scanned['status'])) ?>
+                        </span>
+                    </div>
+                    <span class="qr-result-total"><?= e(money($scanned['total_amount'])) ?></span>
+                </div>
+
+                <dl class="info-list">
+                    <?php detail_row('Customer', $scanned['customer_name']); ?>
+                    <?php detail_row('Reference', order_short_code((int)$scanned['id']), true); ?>
+                    <?php detail_row('Placed', fmt_datetime($scanned['created_at'])); ?>
+                </dl>
+
+                <?php render_status_actions($scanned, '/admin/qr_scan.php'); ?>
+            </div>
+        <?php endif; ?>
 
     </div>
 </div>

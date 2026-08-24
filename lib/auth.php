@@ -64,11 +64,19 @@ function login_user(array $user): void
     $_SESSION['user_id']    = (int)$user['id'];
     $_SESSION['role']       = $user['role'];
     $_SESSION['login_time'] = time();
+
+    // Anything that asked can() earlier in THIS request answered for a
+    // guest and cached it. The redirect immediately after this call
+    // would otherwise read that stale answer and send an administrator
+    // to their profile page instead of their real landing page.
+    role_reset_cache();
 }
 
 /** Destroy the session completely. */
 function logout_user(): void
 {
+    role_reset_cache();
+
     $_SESSION = [];
 
     if (ini_get('session.use_cookies')) {
@@ -88,10 +96,25 @@ function active_admin_count(): int
     return (int)db_value("SELECT COUNT(*) FROM users WHERE role = 'admin' AND status = 'active'");
 }
 
-/** Where a user belongs after logging in. */
+/**
+ * Where a user belongs after logging in.
+ *
+ * This used to hand every administrator /admin/dashboard.php. Once the
+ * dashboard became a permission like any other, a role without it met a
+ * 403 the moment it signed in -- the first thing a new Delivery Man
+ * account saw was "Not authorised", which is a dreadful greeting for
+ * something working exactly as designed.
+ *
+ * admin_landing_url() answers properly: the role's configured landing
+ * page if it still holds that permission, otherwise the first area it
+ * can open, otherwise its own profile. There is no permission set,
+ * including the empty one, that lands on a page the role cannot open.
+ *
+ * Members are unchanged -- the whole role model is admin-side.
+ */
 function home_url_for_role(string $role): string
 {
-    return $role === 'admin' ? '/admin/dashboard.php' : '/member/home.php';
+    return $role === 'admin' ? admin_landing_url() : '/member/home.php';
 }
 
 // ------------------------------------------------------------
@@ -142,7 +165,10 @@ function require_member(): void
     if (!is_member()) {
         http_response_code(403);
         flash_error('This page is for members only.');
-        redirect('/admin/dashboard.php');
+
+        // Not the dashboard: an admin whose role lacks dashboard.view
+        // would be bounced from one 403 straight into another.
+        redirect(admin_landing_url());
     }
 }
 
