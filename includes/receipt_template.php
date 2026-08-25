@@ -75,9 +75,25 @@ $qrShortCode = order_short_code((int)$order['id']);
                 <div><strong><?= e($order['customer_name']) ?></strong></div>
                 <div style="color: <?= $muted ?>;"><?= e($order['customer_email']) ?></div>
             </td>
-            <td style="width: 50%; vertical-align: top;">
+            <?php /* Right-aligned so this column hangs off the same edge as the
+                     RECEIPT / No. / Order / Date block above it, giving the page
+                     one clean right margin instead of two ragged ones.
+                     text-align on the cell rather than on each child: it
+                     inherits, and Dompdf and email clients all honour it on a
+                     <td>, which is not true of every layout property. */ ?>
+            <td style="width: 50%; vertical-align: top; text-align: right;">
                 <div style="color: <?= $muted ?>; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px;">Shipped to</div>
                 <div style="color: <?= $muted ?>;"><?= nl2br(e($order['shipping_address'])) ?></div>
+
+                <?php /* Omitted entirely when nothing was recorded, which is
+                         true of every order placed before the shop started
+                         keeping this. An empty "Paid with" label reads like a
+                         fault; no label reads like nothing to say. */ ?>
+                <?php $paidWith = payment_method_label($order); ?>
+                <?php if ($paidWith !== null): ?>
+                    <div style="color: <?= $muted ?>; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; margin: 12px 0 4px;">Paid with</div>
+                    <div><?= e($paidWith) ?></div>
+                <?php endif; ?>
             </td>
         </tr>
     </table>

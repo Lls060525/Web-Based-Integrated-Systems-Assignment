@@ -4,6 +4,35 @@
 //
 // Every operation runs in PHP with GD and writes a NEW file, then
 // points the gallery row at it and deletes the previous one.
+//
+// ------------------------------------------------------------
+// WHY A NEW FILE EVERY TIME, INSTEAD OF EDITING IN PLACE
+// ------------------------------------------------------------
+//
+// Writing over the existing file would be fewer lines and is the
+// obvious first instinct. It is wrong for three reasons:
+//
+//   1. If GD fails halfway -- out of memory on a large photo is the
+//      usual way -- an in-place write leaves a half-written file where
+//      a working image used to be. The original is gone and there is
+//      nothing to fall back to. Writing somewhere new means a failure
+//      costs a temporary file and nothing else.
+//
+//   2. Browsers cache by URL. Same filename, new content, and the
+//      admin keeps seeing the old picture and assumes the rotate did
+//      not work. A new filename is a new URL, so the change is
+//      visible immediately without cache-busting tricks.
+//
+//   3. Rotating is lossy. Each save re-compresses the JPEG, so
+//      rotating four times through in-place edits gets you back to the
+//      original orientation with visibly worse quality. Keeping the
+//      FIRST version as a restore point -- which apply_photo_edit()
+//      does -- means "restore original" returns the untouched upload,
+//      not the accumulated damage.
+//
+// So the flow is: process_image() writes a new file and returns its
+// name, apply_photo_edit() repoints the database row and tidies up the
+// intermediate, and original_filename remembers where it started.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -13,6 +42,9 @@ require_permission('products.manage');
 $photoId   = get_int('photo');
 $productId = get_int('product');
 
+// Optional-feature guard, the pattern used throughout this project: a
+// missing migration produces an explanation and a redirect, never a
+// fatal error about an unknown table in front of a marker.
 if (!photo_gallery_ready()) {
     flash_error('The photo gallery is not available yet: run database/migration_15_product_photos.sql.');
     redirect('/admin/products.php');
@@ -24,6 +56,20 @@ if ($photoId === null || $productId === null) {
 }
 
 $product = db_one('SELECT * FROM products WHERE id = ?', [$productId]);
+
+// BOTH ids, not just the photo id.
+//
+// find_product_photo() filters on photo id AND product id together, so
+// ?photo=88&product=3 fails when photo 88 belongs to product 12. The
+// pair has to be consistent.
+//
+// Without it the page would happily edit photo 88 while displaying
+// product 3's name and returning to product 3's gallery afterwards --
+// so an admin could rotate a photo belonging to a different product
+// while believing they were working on this one. It is the same
+// "prove the relationship in the query" idea as the ownership check in
+// order_detail.php, applied to a parent-child link instead of to a
+// user.
 $photo   = find_product_photo($photoId, $productId);
 
 if (!$product || !$photo) {
@@ -46,15 +92,39 @@ if (is_post()) {
             // GD writes a new file; apply_photo_edit() then updates the
             // row, keeps the very first version as the restore point,
             // and removes only the intermediate file.
+            //
+            // $operation is NOT validated here. process_image() checks
+            // it against image_operations() -- the same list the
+            // buttons are drawn from -- and throws RuntimeException if
+            // it is not one of them. One list, one check, so a new
+            // operation cannot be added to the UI and forgotten in the
+            // validation.
             $newName = process_image(DIR_UPLOAD_PRODUCTS, $photo['filename'], $operation);
 
             apply_photo_edit($photoId, $productId, $newName);
 
             flash_success(image_operations()[$operation]['label'] . ' applied.');
 
+        // ---- Two catch blocks, deliberately ----
+        //
+        // They differ in who the message is FOR, which is the question
+        // worth asking every time you write a catch.
         } catch (\RuntimeException $ex) {
+            // Thrown by our own code for reasons the admin can act on:
+            // unsupported operation, GD not installed, file missing.
+            // The message was written to be read, so it is shown.
             flash_error($ex->getMessage());
+
         } catch (\Throwable $ex) {
+            // Anything else -- out of memory, a corrupt JPEG, a disk
+            // error. These messages contain file paths and internals,
+            // which are useful in a log and are an information leak on
+            // a screen. So the detail goes to error_log and the admin
+            // gets a plain sentence.
+            //
+            // Note it catches Throwable, not Exception: a PHP Error
+            // (a TypeError from GD, say) is not an Exception and would
+            // otherwise escape this block and produce a blank page.
             error_log('Image processing failed: ' . $ex->getMessage());
             flash_error('The image could not be processed.');
         }

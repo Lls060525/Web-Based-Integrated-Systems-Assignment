@@ -5,6 +5,39 @@
 // Deleting a product is not symmetrical with creating one. A product
 // somebody has already bought is part of that customer's order record,
 // so this page separates the two cases and refuses to blur them.
+//
+// ------------------------------------------------------------
+// THE IDEA THIS PAGE IS BUILT ON
+// ------------------------------------------------------------
+//
+// "Delete" means two different things and an admin rarely says which:
+//
+//   DEACTIVATE  hide it from the storefront, keep the row
+//   DELETE      remove the row and its photo files from disk
+//
+// For a product nobody has bought, either is fine. For a product that
+// appears in an order, only the first is: order_items points at the
+// product row, and a receipt printed next year still has to be able to
+// say what was bought. Deleting it would either break that link or --
+// worse, if the foreign key cascaded -- quietly remove line items from
+// a customer's completed order.
+//
+// So this page does not offer a single Delete button and hope. It
+// ANALYSES the selection first, splits it into safe and blocked, and
+// shows which is which before anything happens. The blocked ones are
+// not silently skipped either; they are named, with the reason.
+//
+// ------------------------------------------------------------
+// SAME TWO-STEP SHAPE AS THE OTHER BATCH TOOLS
+// ------------------------------------------------------------
+//
+//   POST action=analyse  -> works out safe vs blocked, stages the ids
+//   POST action=commit   -> applies exactly those staged ids
+//
+// batch_stage() hands back a one-use token; batch_take_stage() reads
+// and destroys it, so a double-click cannot run the deletion twice.
+// See lib/batch.php, and admin/batch_import.php for the fuller
+// explanation of why parse and write are separated.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -38,6 +71,12 @@ if (is_post()) {
             redirect('/admin/batch_delete.php');
         }
 
+        // The mode comes from the STAGED data, not from this POST.
+        //
+        // If it were read from the request, someone could preview a
+        // harmless "deactivate" and then submit mode=delete with the
+        // same token. Reading it back from what was staged means the
+        // action carried out is the one that was previewed.
         $mode = $staged['mode'];
 
         if ($mode === 'delete') {
@@ -48,6 +87,12 @@ if (is_post()) {
                 redirect('/admin/batch_delete.php');
             }
 
+            // Deletes rows AND the photo files off disk, inside a
+            // transaction. It re-checks the order-history rule itself
+            // rather than trusting the analysis: the staged ids were
+            // worked out a minute ago, and someone may have placed an
+            // order containing one of them since. Anything newly unsafe
+            // comes back in $result['refused'].
             $result = batch_delete_products($staged['ids'], (int)current_user_id());
 
             if (!empty($result['rolled_back'])) {
@@ -78,15 +123,36 @@ if (is_post()) {
 
     // ---------- Step 1: analyse the selection ----------
     if ($action === 'analyse') {
+        // The checkboxes arrive as ids[] -- an array, so post() (which
+        // returns a string) is not the right tool and $_POST is read
+        // directly.
+        //
+        // Three passes, each removing a different kind of rubbish:
+        //   intval    turns "7" into 7 and anything non-numeric into 0
+        //   unique    a repeated id would be counted twice in the summary
+        //   > 0       drops the zeros the first pass just created
         $ids  = array_map('intval', (array)($_POST['ids'] ?? []));
         $ids  = array_values(array_filter(array_unique($ids), static fn($id) => $id > 0));
+
+        // Anything that is not exactly 'delete' becomes 'deactivate'.
+        // Written this way round on purpose: a typo or a tampered value
+        // lands on the reversible action, never the destructive one.
         $mode = post('mode') === 'delete' ? 'delete' : 'deactivate';
 
         if ($ids === []) {
             add_err('ids', 'Select at least one product.');
         } else {
+            // Splits the selection into 'safe' (never ordered) and
+            // 'blocked' (appears in order_items), with the order count
+            // per product so the table can explain itself.
             $result = batch_delete_analysis($ids);
 
+            // The key line on this page.
+            //
+            // Deleting stages only the SAFE ids -- the blocked ones are
+            // dropped here and can never reach batch_delete_products().
+            // Deactivating stages ALL of them, because hiding a product
+            // that has been ordered is exactly what should happen to it.
             $targets = $mode === 'delete' ? $result['safe'] : $ids;
 
             $token = batch_stage($stageKey, ['ids' => $targets, 'mode' => $mode]);
@@ -107,6 +173,26 @@ if (is_post()) {
 }
 
 // ---------- Listing for the picker ----------
+//
+// A query assembled from optional filters. Two things make this safe
+// and worth copying, and one line looks lazy but is not:
+//
+//   LEFT JOIN, not JOIN, on categories. An inner join would silently
+//   hide every product whose category_id is NULL -- and on a delete
+//   screen, a product you cannot see is a product you cannot tidy up.
+//
+//   WHERE 1 = 1 exists so that every filter below can start with
+//   " AND ". Without it the first filter would need " WHERE " and the
+//   rest " AND ", which means tracking whether anything has been added
+//   yet. MySQL optimises the constant away, so it costs nothing.
+//
+//   The filter VALUES never touch the SQL string. Each one appends a
+//   ? placeholder and pushes the value into $params, which PDO sends
+//   separately. This is the whole defence against SQL injection: the
+//   database receives the query shape and the data down different
+//   channels, so a value can never be read as syntax. Writing
+//   "WHERE name LIKE '%$filterQuery%'" here instead would be the
+//   classic hole.
 $sql    = 'SELECT p.id, p.name, p.price, p.stock, p.status, c.name AS category_name
              FROM products p
              LEFT JOIN categories c ON c.id = p.category_id
@@ -124,10 +210,16 @@ if ($filterStatus !== 'all' && $filterStatus !== '') {
 }
 
 if ($filterQuery !== '') {
+    // The % wildcards go on the VALUE, not into the SQL. The query says
+    // "LIKE ?" and the parameter happens to contain percent signs --
+    // which is why a customer searching for "50%" cannot change the
+    // meaning of the statement.
     $sql     .= ' AND p.name LIKE ?';
     $params[] = '%' . $filterQuery . '%';
 }
 
+// Ordered by name because this is a list to hunt through by eye, not
+// the newest-first listing the other admin pages use.
 $sql .= ' ORDER BY p.name ASC';
 
 $products = db_all($sql, $params);
@@ -163,7 +255,7 @@ include __DIR__ . '/../includes/admin_header.php';
 
             <?php if ($analysis['mode'] === 'delete' && $analysis['blocked'] !== []): ?>
                 <div class="alert alert-warning">
-                    <i class="fas fa-shield-halved"></i>
+                    <i class="fas fa-shield-alt"></i>
                     <strong><?= count($analysis['blocked']) ?> product(s) cannot be deleted.</strong>
                     They appear in customer orders. Order history renders each line by joining
                     back to the product, so deleting one would make those lines disappear from

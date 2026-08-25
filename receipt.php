@@ -116,6 +116,12 @@ if ($mode === 'pdf') {
 $title = 'Receipt ' . $data['receipt_no'];
 ?>
 <!doctype html>
+<?php /* Deliberately NOT themed, and deliberately not loading
+         style.css: this page is printed and attached to email as a
+         PDF. A dark receipt wastes a cartridge and reads badly on
+         paper, so it keeps its own light styles whatever the reader's
+         preference. This is the one exception to the theming in
+         lib/theme.php -- please leave it. */ ?>
 <html lang="en">
 <head>
     <meta charset="utf-8">

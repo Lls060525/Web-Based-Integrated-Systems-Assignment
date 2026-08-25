@@ -210,7 +210,7 @@ include __DIR__ . '/../includes/header.php';
 
             <?php if ($needCaptcha): ?>
                 <p class="muted small-note captcha-reason">
-                    <i class="fas fa-shield-halved"></i>
+                    <i class="fas fa-shield-alt"></i>
                     A sign-in for this address has already failed, so please confirm
                     you are not a robot.
                 </p>

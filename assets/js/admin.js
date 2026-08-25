@@ -106,21 +106,35 @@ $(function () {
     // Must match AJAX_PAGER_SEPARATOR in lib/ajax.php.
     var PAGER_SEPARATOR = '<!--pager-->';
 
+    /* The waiting message has to be shaped like the thing it is standing
+     * in for. A listing rendered as a photo grid is a <div>, and a <tr>
+     * placed in a <div> is thrown away by the HTML parser -- so the table
+     * version of this message would vanish silently in grid view and the
+     * listing would just sit there looking broken while it loaded. */
+    function noticeMarkup($target, message, extraClass) {
+        var cls = 'table-empty' + (extraClass ? ' ' + extraClass : '');
+
+        if ($target.is('tbody')) {
+            var colspan = $target.closest('table').find('thead th').length || 6;
+
+            return '<tr><td colspan="' + colspan + '" class="' + cls + '">'
+                 + message + '</td></tr>';
+        }
+
+        return '<p class="' + cls + ' grid-empty">' + message + '</p>';
+    }
+
     function runSearch($form) {
         var $tbody = $($form.data('target'));
 
         if ($tbody.length === 0) { return; }
-
-        var colspan = $tbody.closest('table').find('thead th').length || 6;
 
         // Ignore an answer that is no longer the current query. Without
         // this a slow early request can land after a fast later one and
         // put stale rows back on screen.
         var mySeq = ++searchSeq;
 
-        $tbody.html(
-            '<tr><td colspan="' + colspan + '" class="table-empty">Searching...</td></tr>'
-        );
+        $tbody.html(noticeMarkup($tbody, 'Searching...'));
 
         // The whole form, not just the text box. Members carries a hidden
         // "status" and Stock a hidden "filter"; sending only q dropped
@@ -156,10 +170,9 @@ $(function () {
         }).fail(function (xhr, status) {
             if (status === 'abort') { return; }
 
-            $tbody.html(
-                '<tr><td colspan="' + colspan + '" class="table-empty is-error">'
-                + 'Could not load results. Please try again.</td></tr>'
-            );
+            $tbody.html(noticeMarkup(
+                $tbody, 'Could not load results. Please try again.', 'is-error'
+            ));
         });
     }
 

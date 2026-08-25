@@ -2,21 +2,69 @@
 // ============================================================
 // member/points.php - Reward Points (Member)
 // Balance plus the full ledger, so nothing is unexplained.
+//
+// ------------------------------------------------------------
+// THERE IS NO "POINTS" COLUMN, AND THAT IS THE DESIGN
+// ------------------------------------------------------------
+//
+// The obvious way to store a balance is a number on the user row that
+// goes up and down. This project does not do that. Instead every
+// change is a ROW in point_transactions -- earned on this order,
+// redeemed on that one, adjusted by this admin for this reason -- and
+// the balance is the sum of those rows.
+//
+// It costs a SUM on every read. It buys three things that a single
+// column cannot:
+//
+//   It can be explained. When a customer asks "why do I have 480
+//   points", the answer is a list, which is exactly what this page
+//   prints. With one column the honest answer is "because that is
+//   what it says".
+//
+//   It cannot silently lose a change. Two requests reading 500,
+//   adding 50, and writing 550 leave the customer 50 short and no
+//   trace of it. Two requests appending a row leave two rows.
+//
+//   It cannot drift. A balance column and a history table can
+//   disagree, and when they do neither is obviously right. With one
+//   source there is nothing to reconcile.
+//
+// The trade is real -- summing thousands of rows per page load would
+// eventually need a cached total -- but at this size correctness is
+// worth more than the microseconds, and the cache can be added later
+// without changing what the truth is.
 // ============================================================
 
 require_once __DIR__ . '/../lib/init.php';
 
+// Members only, and this is not cosmetic: the whole page is one
+// person's financial history.
 require_member();
 
 $title  = 'My Reward Points - ' . APP_NAME;
+
+// From the SESSION, never from the URL.
+//
+// If this page took ?user=123 it would hand any member anybody else's
+// point history. There is no ownership check anywhere below because
+// there is nothing to check -- the only id in play is the signed-in
+// member's own.
 $userId = current_user_id();
 
+// Optional-feature guard: a missing migration explains itself instead
+// of producing a fatal error about an unknown table.
 if (!points_module_ready()) {
     flash_error('Reward points are not available yet: run database/migration_12_points.sql.');
     redirect('/member/profile.php');
 }
 
+// balance, lifetime earned and lifetime redeemed -- all three derived
+// from the ledger, in one query rather than three.
 $summary = points_summary($userId);
+
+// Capped at 100 entries. A member with years of history does not need
+// every row rendered into one page, and an unbounded query is the kind
+// of thing that is fine on sample data and fatal on real data.
 $history = points_history($userId, 100);
 
 include __DIR__ . '/../includes/header.php';

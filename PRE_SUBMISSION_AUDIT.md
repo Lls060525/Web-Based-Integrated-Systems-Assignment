@@ -8,7 +8,21 @@ by spot-reading.
 
 ## Summary
 
-**No code defects were found.** One piece of dead CSS was found and removed.
+**One code defect was found and fixed**, plus one piece of dead CSS.
+
+Correction to an earlier version of this document, which said no code
+defects were found: `admin/spec_form.php` contained **two** top-level
+`if (is_post())` blocks. The second (133 lines) was the pre-PRG original,
+left behind when the newer handler was added above it rather than
+replacing it. It was unreachable -- the first block always exits, via
+`redirect()` on success or `redirect_back()` on failure -- and it also
+referenced `$found`, which is undefined on the "add" path, emitting a
+warning to the error log on every failed validation. Removed; the file
+went from 470 to 337 lines.
+
+The earlier sweep missed it because it checked whether every file
+PARSED, not whether every block could be REACHED. Brace balance says
+nothing about dead code.
 
 The risks that remain are **not bugs** — they are things that must be done before
 the ZIP is handed in, and one of them is a required deliverable that does not
@@ -16,10 +30,10 @@ exist yet.
 
 | | |
 |---|---|
-| Code defects | **0** |
-| Dead code removed | 1 (duplicate `.toggle-btn` block) |
+| Code defects | **1** (fixed) |
+| Dead code removed | 2 (duplicate `.toggle-btn` CSS; 133 dead lines in `spec_form.php`) |
 | Basic modules missing | **0 of 19** |
-| Additional modules implemented | **34+** of the ~44 listed |
+| Additional modules implemented | **36+** of the ~44 listed |
 | Blocking submission issues | **3** |
 
 ---
@@ -88,14 +102,16 @@ Dynamic photo slider · Drag-and-drop upload · YouTube video · Webcam capture 
 Image processing · Batch insert from CSV · Batch price update · Batch delete ·
 Email verification · CAPTCHA · Temporary login blocking · Block/unblock account ·
 Remember Me · Google Maps store locator · QR generate + scan · Permanent cart ·
-Data charts · Top selling products · AJAX · Product comparison
+Data charts · Top selling products · AJAX · Product comparison · Record
+Listing (table view + photo view) · Remember user preference (dark theme)
 
 Beyond the brief's list: **role and permission management**, **per-transition
-authorisation**, **delivery evidence photos**, and a **cancellation approval
-workflow**.
+authorisation**, **delivery evidence photos**, a **cancellation approval
+workflow**, and the **payment method recorded and shown on the receipt**
+(FPX with the customer's bank, card brand and last four, or GrabPay).
 
-Not implemented (the brief only asks for "some"): Record Listing as Table + Photo
-View toggle, SMS integration, real-time chat, theme preference.
+Not implemented (the brief only asks for "some"): SMS integration, real-time
+chat.
 
 ### 2.x Technology and convention rules
 
@@ -187,6 +203,7 @@ show for the "General Web Security" 10%.
 ## 5. Pre-submission checklist
 
 ```
+[ ] run migrations 25-30                 (29 = theme, 30 = payment method)
 [ ] mysqldump -> database/mobile2u.sql   (REQUIRED deliverable)
 [ ] delete lib/config.php                (Stripe key + Gmail App Password)
 [ ] delete cloudflared.exe               (52 MB)
@@ -194,6 +211,7 @@ show for the "General Web Security" 10%.
 [ ] MAIL_MODE -> 'dev' if not demoing live email
 [ ] CAPTCHA_DRIVER -> 'image' if demoing over a tunnel
 [ ] confirm APP_DEBUG is false           (it already is)
+[x] jsQR.js downloaded for offline scanning  (261 KB, present)
 [ ] slide: ERD from phpMyAdmin + per-member screenshots
 [ ] zip the project folder
 ```

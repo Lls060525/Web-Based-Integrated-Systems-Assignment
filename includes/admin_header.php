@@ -54,7 +54,9 @@ foreach (permitted_admin_areas() as $permission => $area) {
 
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<?php /* Printed by the server on the first tag, so there is no moment
+         at which the page is the wrong colour. See lib/theme.php. */ ?>
+<html lang="en" data-theme="<?= e(theme_attribute()) ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -83,7 +85,24 @@ foreach (permitted_admin_areas() as $permission => $area) {
                  was being sent to a page their role cannot open. */ ?>
         <a href="<?= e(admin_landing_url()) ?>" class="sidebar-brand"><?= e(APP_NAME) ?></a>
         <nav class="sidebar-nav">
+            <?php /* Tracks the group of the PREVIOUS item, so a heading is
+                     printed only when the group changes.
+
+                     The list being walked is already filtered to what this
+                     role may open, which is what makes empty groups
+                     impossible: if a role can open nothing under Catalogue,
+                     no Catalogue item is ever reached, so the heading is
+                     never triggered. No separate "does this group have
+                     anything in it" check is needed. */ ?>
+            <?php $lastGroup = null; ?>
+
             <?php foreach ($layout_nav as $file => $item): ?>
+                <?php $group = $item['group'] ?? ''; ?>
+                <?php if ($group !== '' && $group !== $lastGroup): ?>
+                    <p class="sidebar-group"><?= e($group) ?></p>
+                    <?php $lastGroup = $group; ?>
+                <?php endif; ?>
+
                 <a href="/admin/<?= e($file) ?>"
                    class="nav-link<?= $layout_page === $file ? ' active' : '' ?>">
                     <i class="fas <?= e($item['icon']) ?>"></i>
@@ -124,6 +143,10 @@ foreach (permitted_admin_areas() as $permission => $area) {
             </button>
 
             <div class="topbar-right">
+                <?php theme_switcher(); ?>
+
+                <span class="topbar-divider"></span>
+
                 <a href="/admin/profile.php" class="topbar-profile">
                     <img src="<?= e($layout_avatar) ?>" alt="Profile photo" class="topbar-avatar">
                     <span class="topbar-name"><?= e($layout_name) ?></span>

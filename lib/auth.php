@@ -70,6 +70,12 @@ function login_user(array $user): void
     // would otherwise read that stale answer and send an administrator
     // to their profile page instead of their real landing page.
     role_reset_cache();
+
+    // The theme cached a moment ago was this browser's cookie, chosen
+    // by whoever was here before. Clear it, then let a guest's own
+    // choice follow them into the account they just opened.
+    theme_reset_cache();
+    theme_adopt_guest_choice();
 }
 
 /** Destroy the session completely. */

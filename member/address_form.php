@@ -1,6 +1,19 @@
 <?php
 // ============================================================
 // member/address_form.php - Add / edit a shipping address
+//
+// The same one-file-two-jobs shape as admin/voucher_form.php: $isEdit
+// decides everything, defaults are declared up front so the HTML can
+// print $address without caring which mode it is in.
+//
+// What is worth studying HERE is that every operation carries $userId
+// alongside the address id -- find_user_address($id, $userId),
+// update_address($id, $userId, ...). One customer's address book must
+// never be reachable from another customer's session, and the way
+// that is guaranteed is by making ownership part of every query
+// rather than something checked once at the top. Same principle as
+// order_detail.php; read the header comment there for why the
+// "fetch first, check after" alternative rots over time.
 // ============================================================
 
 require_once __DIR__ . '/../lib/init.php';
@@ -40,6 +53,15 @@ if ($isEdit) {
 }
 
 // Adding beyond the cap is refused on the server, not just hidden in the UI.
+//
+// addresses.php stops showing the "Add" button at the limit, but a
+// button that is not drawn is not a rule -- the URL still exists and
+// can still be typed. Hiding a control is a courtesy to the user;
+// refusing the request is the actual limit. Anywhere this project
+// hides an action, there is a check like this behind it.
+//
+// !$isEdit matters: editing an existing address does not add one, so
+// somebody already at the cap must still be able to correct a typo.
 if (!$isEdit && address_count($userId) >= ADDRESS_MAX_PER_USER) {
     flash_error('You already have ' . ADDRESS_MAX_PER_USER . ' saved addresses. Delete one first.');
     redirect('/member/addresses.php');
@@ -48,11 +70,17 @@ if (!$isEdit && address_count($userId) >= ADDRESS_MAX_PER_USER) {
 if (is_post()) {
     csrf_check();
 
+    // Shared with checkout.php, which can also create an address
+    // inline. One function means the two entry points cannot enforce
+    // different rules about what a valid Malaysian address is.
     $data        = validate_address_input();
     $makeDefault = post('is_default') === '1';
 
     if (no_err()) {
         if ($isEdit) {
+            // $userId again: this is an UPDATE ... WHERE id = ? AND
+            // user_id = ?, so posting somebody else's address id
+            // changes zero rows rather than their address.
             update_address($id, $userId, $data, $makeDefault);
             flash_success('Address updated.');
         } else {
@@ -61,6 +89,14 @@ if (is_post()) {
         }
 
         // Coming from checkout? Go straight back there.
+        //
+        // Note what this does NOT do: redirect to whatever ?return
+        // contains. It compares it to a known value and picks from two
+        // hard-coded paths. Handing a redirect a URL from the query
+        // string is how open redirects happen -- a link that genuinely
+        // starts on this domain, and lands on somebody else's login
+        // page. Comparing instead of using means the destination can
+        // only ever be one of two places this file names itself.
         redirect(get('return') === 'checkout' ? '/checkout.php' : '/member/addresses.php');
     }
 }

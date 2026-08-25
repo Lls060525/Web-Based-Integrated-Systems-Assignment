@@ -1,6 +1,21 @@
 <?php
 // ============================================================
 // admin/stores.php - Store Locations (Admin)
+//
+// Four actions on the store list -- toggle visibility, set the
+// flagship, delete, and the implicit "just show me the list".
+//
+// Two things in this file are worth reading closely, and they are the
+// same idea applied twice: SOME STATES MUST ALWAYS HOLD, and the code
+// is responsible for them because the database cannot express them.
+//
+//   "at least one active store"  -- enforced in the toggle branch
+//   "exactly one flagship"       -- enforced in the primary branch
+//
+// A CHECK constraint cannot say either of those; both are statements
+// about the table as a whole rather than about one row. So they are
+// enforced here, and the second one needs a transaction to stay true
+// even for the instant it takes to move the flag.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -52,21 +67,60 @@ if (is_post()) {
 
     } elseif ($action === 'primary') {
         // Exactly one flagship, so the pair of writes is a transaction.
+        //
+        // THIS IS THE CLEAREST EXAMPLE OF A TRANSACTION IN THE PROJECT
+        // -- worth understanding before the demo, because "why is that
+        // a transaction" is an obvious thing to be asked.
+        //
+        // Moving a flag from one row to another cannot be done in one
+        // statement. It takes two: clear it everywhere, then set it
+        // here. Between those two statements the table is in a state
+        // that must never be observed -- NO store is the flagship.
+        //
+        // Without a transaction, a crash, a timeout or a lost
+        // connection between the two lines leaves the shop with no
+        // flagship at all, permanently, and nothing reports it. Another
+        // request reading the table in that window sees the same thing.
+        //
+        // beginTransaction() makes the pair atomic: either both
+        // statements land or neither does. There is no moment at which
+        // another connection can see zero flagships.
         db()->beginTransaction();
 
         try {
+            // Deliberately unfiltered -- clear the flag on EVERY row.
+            // Cheaper and safer than finding the current holder first,
+            // and it self-heals if two rows somehow both have it.
             db_exec('UPDATE stores SET is_primary = 0');
+
+            // is_active = 1 as well as is_primary = 1: the flagship is
+            // what the storefront shows first, so a hidden flagship
+            // would be a contradiction. Set together, in one statement,
+            // so the two can never disagree.
             db_exec('UPDATE stores SET is_primary = 1, is_active = 1 WHERE id = ?', [$id]);
+
+            // Nothing is permanent until this line.
             db()->commit();
 
             flash_success($store['name'] . ' is now the flagship store.');
 
         } catch (\Throwable $e) {
+            // Undoes the first UPDATE as well as the second. Without
+            // this the flag would stay cleared everywhere -- the exact
+            // broken state the transaction exists to prevent.
             db()->rollBack();
             flash_error('Could not update the flagship store.');
         }
 
     } elseif ($action === 'delete') {
+        // A hard DELETE, unlike products and admins, which are
+        // deactivated instead.
+        //
+        // The difference is whether anything else points at the row. An
+        // order references the product that was bought, so deleting it
+        // would damage a customer's records. Nothing references a
+        // store -- it is display data for the locator page -- so there
+        // is no history to protect and a real delete is honest.
         db_exec('DELETE FROM stores WHERE id = ?', [$id]);
         flash_success($store['name'] . ' deleted.');
 

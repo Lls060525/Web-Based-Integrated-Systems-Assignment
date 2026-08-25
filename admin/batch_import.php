@@ -4,6 +4,42 @@
 //
 // Paste text or upload a CSV, see exactly what will happen, then
 // confirm. Nothing is written until the second submit.
+//
+// ------------------------------------------------------------
+// HOW TO READ THIS FILE
+// ------------------------------------------------------------
+//
+// It is ONE page that serves three different requests, told apart by
+// what arrives:
+//
+//   GET  ?template=csv    -> sends a sample file and exits
+//   POST action=preview   -> parses, validates, shows step 2
+//   POST action=commit    -> writes to the database
+//
+// The page therefore reads top to bottom as: template download, then
+// the POST handlers, then the HTML, which renders either the preview
+// (when $preview is set) or the upload form (when it is not).
+//
+// ------------------------------------------------------------
+// WHY TWO STEPS INSTEAD OF ONE
+// ------------------------------------------------------------
+//
+// Importing 200 products is not undoable by hand. A single-step
+// importer gives you a result you did not expect and no way back --
+// you cannot tell by looking which of 200 rows it changed.
+//
+// So parsing and writing are split. Step 1 works out exactly what
+// WOULD happen and shows it as a table; step 2 carries it out. The
+// interesting consequence is that step 2 must not re-parse the file:
+// if it did, the file could differ from the one that produced the
+// preview, and the confirmation would be a confirmation of something
+// else. Instead step 1 STAGES its result under a one-use token (see
+// batch_stage / batch_take_stage in lib/batch.php) and step 2 applies
+// exactly those rows.
+//
+// The heavy lifting lives in lib/batch.php so that this page, and
+// batch_price.php and batch_delete.php beside it, share one parser
+// and one staging mechanism rather than three that drift apart.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -33,13 +69,40 @@ if (get('template') === 'csv') {
     exit;
 }
 
+// $preview stays null on a plain GET, and the HTML at the bottom uses
+// that to decide which of the two steps to draw. One variable is the
+// whole "which screen am I on" state.
 $preview  = null;
 $parsed   = null;
+
+// Namespaces this page's staged data in the session, so an import
+// preview and a price-change preview can exist at the same time
+// without one overwriting the other.
 $stageKey = 'import';
 
+// ---------- The three import options ----------
+// Read from the POST every time rather than held in the session, so
+// the preview always reflects the boxes as they are ticked NOW.
 $options = [
     'duplicates'        => post('duplicates', 'skip'),
     'create_categories' => post('create_categories') === '1',
+
+    // Reads oddly, and has to.
+    //
+    // An unticked checkbox sends NOTHING -- it is simply absent from
+    // the POST. So "absent" has two different meanings depending on
+    // how we arrived:
+    //
+    //   first visit (GET)  -> nobody has expressed a view yet, and the
+    //                         safe default for a destructive bulk
+    //                         operation is all-or-nothing ON
+    //   after a submit     -> absent means the user deliberately
+    //                         UNTICKED it, and must stay off
+    //
+    // is_post() is what tells those two cases apart. Defaulting to '1'
+    // unconditionally would make the box impossible to turn off; to ''
+    // would silently drop the safer default on the screen where it
+    // matters most.
     'stop_on_error'     => post('stop_on_error', is_post() ? '' : '1') === '1',
 ];
 
@@ -53,6 +116,18 @@ if (is_post()) {
 
     // ---------- Step 2: commit ----------
     if ($action === 'commit') {
+        // TAKE, not read: batch_take_stage() returns the staged rows
+        // and deletes them in the same breath, so the token is good for
+        // exactly one use.
+        //
+        // That is what stops a double-click, or a browser retry, from
+        // importing the same 200 products twice. Checking a flag
+        // instead would leave a window between the check and the write
+        // where a second request could pass the same check.
+        //
+        // It also means the rows applied here are the exact rows the
+        // preview was built from -- the uploaded file is never read a
+        // second time, so what you confirmed is what runs.
         $staged = batch_take_stage($stageKey, post('token'));
 
         if ($staged === null) {
@@ -60,6 +135,9 @@ if (is_post()) {
             redirect('/admin/batch_import.php');
         }
 
+        // Everything below this line is reporting. The database work --
+        // the transaction, the duplicate handling, the category
+        // creation -- is all inside batch_insert_products().
         $result = batch_insert_products($staged['rows'], $staged['options'], (int)current_user_id());
 
         if (!empty($result['rolled_back'])) {
@@ -81,10 +159,29 @@ if (is_post()) {
     }
 
     // ---------- Step 1: parse and validate ----------
+    //
+    // Five gates, each one refusing before the next is attempted:
+    //
+    //   1. is there any input at all      (file or textarea)
+    //   2. can it be parsed as delimited  (batch_parse_delimited)
+    //   3. is it within the row limit     (BATCH_MAX_ROWS)
+    //   4. does the header carry the      (batch_map_columns)
+    //      required columns
+    //   5. is each row individually valid (batch_validate_products)
+    //
+    // The order matters: complaining that "price is not a number" on
+    // 300 rows is useless if the real problem is that the file was
+    // semicolon-separated and every row is one big column. Each gate
+    // is cheaper and more general than the one after it.
     if ($action === 'preview') {
         $source = '';
 
         // An uploaded file wins over the textarea when both are filled.
+        //
+        // is_uploaded_file() as well as the tmp_name check, because the
+        // former asks PHP whether this path really came from an upload.
+        // Without it, a crafted request naming a local path could get
+        // this page to read a file off the server's disk.
         if (!empty($_FILES['csv_file']['tmp_name']) && is_uploaded_file($_FILES['csv_file']['tmp_name'])) {
             $file = $_FILES['csv_file'];
 
@@ -124,13 +221,26 @@ if (is_post()) {
                                       . implode(', ', $columns['missing'])
                                       . '. Found: ' . implode(', ', $parsed['header']) . '.');
                 } else {
+                    // Decides insert / update / skip / error per row and
+                    // counts them up. Nothing is written.
                     $validated = batch_validate_products($parsed['rows'], $columns['map'], $options);
 
+                    // Park the decision, get a one-use token back. The
+                    // token travels to the browser in a hidden field and
+                    // comes back with the confirmation.
+                    //
+                    // The categories to be created are merged into the
+                    // stored options so step 2 creates exactly the ones
+                    // the preview promised -- if another admin adds one
+                    // of them in the meantime, we must not silently
+                    // create a second.
                     $token = batch_stage($stageKey, [
                         'rows'    => $validated['rows'],
                         'options' => $options + ['new_categories' => $validated['summary']['new_categories']],
                     ]);
 
+                    // Setting $preview is what makes the HTML below draw
+                    // step 2 instead of the upload form.
                     $preview = [
                         'token'   => $token,
                         'rows'    => $validated['rows'],
@@ -141,9 +251,21 @@ if (is_post()) {
             }
         }
     }
-    // Validation failed. Answer with a redirect rather than a page, so
-    // the browser's history entry is a GET and F5 cannot resubmit.
-    // The errors and what was typed are carried across the redirect.
+    // Reached by BOTH outcomes of the preview step, which is why it is
+    // not inside an else.
+    //
+    // redirect_back() only redirects when something went wrong. On
+    // success it returns immediately and execution carries on into the
+    // HTML below, where $preview is now set and step 2 gets drawn.
+    // (Read the top of redirect_back() in lib/prg.php -- the early
+    // return is deliberate and this page is one of the reasons it
+    // exists.)
+    //
+    // On failure it parks the errors and the typed values in the
+    // session and redirects here as a GET, so the browser's history
+    // entry is a GET and pressing F5 cannot resubmit the upload. That
+    // is the Post/Redirect/Get pattern; without it a refresh on this
+    // page would re-run an import.
     redirect_back();
 }
 

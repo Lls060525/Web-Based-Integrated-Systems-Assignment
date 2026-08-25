@@ -131,6 +131,20 @@ include __DIR__ . '/../includes/admin_header.php';
                 <h3 class="side-heading">Shipping Address</h3>
                 <p class="muted"><?= nl2br(e($order['shipping_address'])) ?></p>
 
+                <?php /* Support's first question on a payment query is "how did
+                         they pay", so it belongs on the order rather than only
+                         on the receipt. Absent for orders placed before the
+                         shop recorded it. */ ?>
+                <?php $paidWith = payment_method_label($order); ?>
+                <?php if ($paidWith !== null): ?>
+                    <h3 class="side-heading">Paid With</h3>
+                    <p class="muted">
+                        <i class="fas <?= e(payment_method_icon((string)$order['payment_method'])) ?>"
+                           aria-hidden="true"></i>
+                        <?= e($paidWith) ?>
+                    </p>
+                <?php endif; ?>
+
                 <h3 class="side-heading">Receipt</h3>
                 <div class="receipt-actions">
                     <a href="/receipt.php?id=<?= (int)$order['id'] ?>" class="btn-outline btn-block">

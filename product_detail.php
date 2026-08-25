@@ -1,6 +1,36 @@
 <?php
 // ============================================================
 // product_detail.php - single product page
+//
+// ------------------------------------------------------------
+// THE BUSIEST PAGE IN THE SHOP
+// ------------------------------------------------------------
+//
+// Five features share this one screen, which is why it is long:
+//
+//   the photo gallery      includes/product_gallery.php
+//   the option configurator (RAM / storage / colour, which change price)
+//   add to cart / wishlist
+//   the review list, sortable and filterable
+//   four related products
+//
+// Each is rendered by a shared include rather than written inline, so
+// the same component looks identical here and on the listing page.
+// This file's own job is only to GATHER what those components need.
+//
+// ------------------------------------------------------------
+// NOTE THAT THIS PAGE IS PUBLIC
+// ------------------------------------------------------------
+//
+// There is no require_member() at the top -- a shop that demands a
+// login before it will show you a phone does not sell many phones. So
+// every member-only feature below is written defensively:
+//
+//     $myReview = is_member() ? find_user_review(...) : null;
+//
+// The is_member() test is not decoration. current_user_id() returns
+// null for a guest, and passing null into a query that expects a user
+// id is how a public page starts throwing errors at strangers.
 // ============================================================
 
 require_once __DIR__ . '/lib/init.php';
@@ -15,6 +45,17 @@ if ($productId === null) {
     redirect('/products.php');
 }
 
+// status = 'active' is in the WHERE clause, not checked afterwards.
+//
+// A deactivated product must be invisible to customers, and the way to
+// guarantee that is to never load it. Fetching first and hiding later
+// leaves the row sitting in $product where the next feature somebody
+// adds -- a page title, a share link, an "out of stock" notice -- will
+// happily use it.
+//
+// LEFT JOIN on categories, not JOIN: a product with no category still
+// has to be buyable. An inner join would make it vanish from the shop
+// entirely, and the cause would be very hard to spot.
 $product = db_one(
     "SELECT p.*, c.name AS category_name
        FROM products p
@@ -24,11 +65,25 @@ $product = db_one(
 );
 
 if (!$product) {
+    // Same message whether it never existed or was withdrawn. The
+    // customer can do nothing different with the distinction, and
+    // publishing it would map which ids exist.
     flash_error('That product is no longer available.');
     redirect('/products.php');
 }
 
 // Four more items from the same category.
+//
+// p.id <> ? keeps the product off its own "related" shelf, which
+// otherwise happens and looks like a bug to everyone who sees it.
+//
+// ORDER BY RAND() is the one thing here NOT to copy into a bigger
+// system. It makes MySQL assign a random number to every candidate row
+// and sort all of them, just to keep four -- so the cost grows with
+// the size of the category, on a query that runs on every product
+// view. At this catalogue size it is free and it keeps the shelf
+// looking fresh; at 100,000 products it would be one of the first
+// things to fix.
 $related = db_all(
     "SELECT p.*, c.name AS category_name
        FROM products p
@@ -42,12 +97,29 @@ $title = $product['name'] . ' - ' . APP_NAME;
 $stock = (int)$product['stock'];
 
 // ---------- Reviews ----------
+//
+// Sort and filter come from the QUERY STRING, so a filtered view has
+// its own URL and can be linked, bookmarked and shared. Holding them
+// in the session instead would make the page show different things to
+// the same URL, which breaks the back button.
+//
+// Neither value is trusted: product_reviews() maps $reviewSort onto a
+// fixed set of ORDER BY clauses rather than dropping it into the SQL,
+// and get_int() guarantees the star filter is a number or null.
 $reviewSort   = get('review_sort', 'recent');
 $reviewFilter = get_int('stars');
 
-$summary     = rating_summary($productId);
+$summary     = rating_summary($productId);              // average + per-star counts
 $reviews     = product_reviews($productId, $reviewSort, $reviewFilter);
+
+// The three member-only values. Each one short-circuits for guests --
+// see the note at the top about why the is_member() test comes first.
 $myReview    = is_member() ? find_user_review(current_user_id(), $productId) : null;
+
+// "May this person write a review" -- the answer is no unless they
+// bought this product and the order was delivered. The rule lives in
+// lib/review.php and is enforced again in review_form.php; this only
+// decides whether to OFFER the form.
 $mayReview   = is_member() && can_review(current_user_id(), $productId);
 
 $sortOptions = [

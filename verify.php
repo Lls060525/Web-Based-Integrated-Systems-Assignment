@@ -8,6 +8,42 @@
 // Because it is public, it shows the minimum that makes the check
 // meaningful. Whoever is holding the paper is not necessarily the
 // customer, so there is no address, no email and no full name here.
+//
+// ------------------------------------------------------------
+// WHY A QR CODE CANNOT SIMPLY CONTAIN THE ORDER NUMBER
+// ------------------------------------------------------------
+//
+// The obvious design is /verify.php?id=7. It fails immediately: type
+// 8, and you are looking at somebody else's order. A public page
+// addressed by a sequential number is a public page that enumerates
+// its own database.
+//
+// So the QR code carries a SIGNED token instead. lib/qrcode.php builds
+// it as the order id plus an HMAC -- a short fingerprint computed from
+// the id and QR_SECRET, a key only the server knows. Verifying reverses
+// it: recompute the fingerprint from the id in the token and check it
+// matches.
+//
+// The property that matters is that the fingerprint cannot be produced
+// without the secret. Change the id and the HMAC no longer agrees, and
+// there is no way to work out what it should have been. So a token is
+// proof that THIS server issued it for THIS order -- which is exactly
+// what "is this receipt genuine" is asking.
+//
+// This is also why QR_SECRET must be changed from its default before
+// submission: with the shipped value, anybody who has read this
+// project's source can mint valid tokens for any order number.
+//
+// ------------------------------------------------------------
+// TWO WAYS IN, BECAUSE PAPER GETS DAMAGED
+// ------------------------------------------------------------
+//
+//   ?t=<signed token>   scanned from the QR code
+//   the short code      typed by hand, M2U-001A-61B7E3
+//
+// A creased or wet receipt will not scan, and a verification feature
+// that only works on an undamaged one is not much use in a shop. Both
+// paths converge on an $orderId and are then treated identically.
 // ============================================================
 
 require_once __DIR__ . '/lib/init.php';

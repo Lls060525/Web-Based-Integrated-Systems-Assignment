@@ -2,6 +2,33 @@
 // ============================================================
 // member/reviews.php - My Reviews (Member)
 // What you have written, and what you can still write.
+//
+// ------------------------------------------------------------
+// ONLY VERIFIED PURCHASES CAN BE REVIEWED
+// ------------------------------------------------------------
+//
+// The page has two halves and the second is the interesting one:
+//
+//   user_reviews()            reviews this member has written
+//   products_awaiting_review()  products they may still review
+//
+// That second list is not "everything in the shop". It is products
+// this member has actually BOUGHT, on an order that reached
+// 'delivered', and has not already reviewed. Look at the query in
+// lib/review.php: it joins orders to order_items and filters on both
+// the buyer and the status.
+//
+// Two reasons it is built that way. The obvious one is trust -- a
+// rating anybody can post about anything is worth nothing, and review
+// spam is the normal fate of a shop that allows it. The less obvious
+// one is that "delivered" is the earliest moment the customer has the
+// product in their hands. Allowing a review at 'paid' would collect
+// opinions about a parcel that has not arrived, which is a review of
+// the shipping, not the phone.
+//
+// The rule is enforced again in review_form.php before a review is
+// saved. This page only decides what to OFFER; a page that offers
+// nothing is not a page that refuses anything, and both are needed.
 // ============================================================
 
 require_once __DIR__ . '/../lib/init.php';

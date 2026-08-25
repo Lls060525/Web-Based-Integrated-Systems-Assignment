@@ -5,6 +5,39 @@
 // Coordinates are entered by pasting a Google Maps link, because
 // geocoding an address is itself a paid Google API and this project
 // must work without a billing account.
+//
+// ------------------------------------------------------------
+// THE CONSTRAINT THAT SHAPED THIS PAGE
+// ------------------------------------------------------------
+//
+// To put a pin on a map you need latitude and longitude. An admin
+// knows the ADDRESS, not the coordinates. Turning one into the other
+// is called geocoding, and Google's Geocoding API requires a billing
+// account -- which a student project cannot rely on, and which would
+// stop working the moment a free trial ended, in the middle of a
+// demonstration.
+//
+// So the address is not geocoded. Instead the admin opens Google Maps,
+// finds the shop, and pastes the URL. Those URLs contain the
+// coordinates already:
+//
+//     .../@3.1578,101.7117,17z/...      the @lat,lng form
+//     ...?q=3.1578,101.7117             the query form
+//     .../!3d3.1578!4d101.7117          the place form
+//
+// parse_map_link() in lib/store.php pulls the numbers out of any of
+// those. It is thirty lines of pattern matching instead of a paid API
+// key, a network call on every save, and a dependency that can fail.
+//
+// The lesson worth taking from this is not the regex. It is that
+// "where does this data actually come from" is worth asking before
+// reaching for an API -- the admin already had the coordinates on
+// screen, and the job was to stop making them retype what they were
+// looking at.
+//
+// The manual latitude/longitude fields are kept as a fallback, and
+// they are validated independently, so a store can still be placed
+// when a link will not parse.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';

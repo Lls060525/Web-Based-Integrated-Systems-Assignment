@@ -30,6 +30,125 @@ security, input validation) is team-wide.
 
 ---
 
+# Difficulty ranking — read this before you choose
+
+The five slots are **not** equally hard, and the hard one is not the big one.
+Measured across the files each slot owns:
+
+| | Slot | Lines | Files | Transactions | Per 1000 lines | Verdict |
+|---|---|---|---|---|---|---|
+| 1 | **D** Orders + Fulfilment | 1,831 | 12 | 5 | **2.73** | Hardest to explain, least to read |
+| 2 | **B** Product Maintenance | 3,551 | 14 | 6 | 1.69 | Hard concept, large surface |
+| 3 | **C** Cart + Checkout | 2,751 | 15 | 3 | 1.09 | One very hard file, rest moderate |
+| 4 | **A** Security | 2,356 | 15 | 2 | 0.85 | Serious topic, textbook answers |
+| 5 | **E** Member + Admin tools | 4,647 | 25 | 3 | 0.65 | Most to read, least to puzzle out |
+
+A database transaction is the clearest marker of code that has to reason about
+*two things happening at once* — the part students find hardest to defend. So
+"transactions per 1000 lines" is a rough measure of how much of a slot is
+genuinely difficult rather than long.
+
+**Notice that D and E are opposites.** D is the smallest slot and the hardest;
+E is the biggest and the most straightforward. Choosing by file count would
+get this exactly backwards.
+
+---
+
+## What actually makes each one hard
+
+### 1. Slot D — Orders + Fulfilment  ★★★★★
+
+Smallest slot, and almost none of it is ordinary CRUD. Six of its functions go
+beyond the brief's list — the most of any slot — which means six things with
+no textbook answer to fall back on.
+
+You will have to explain, in your own words:
+
+- why cancellation is a **request that gets approved** rather than a status
+- why permissions are **per transition** (Vendor: pending→processing only)
+  rather than per page
+- why staff may only cancel an order that is **currently theirs to move**
+- why the QR payload is **HMAC-signed** instead of just holding the order id
+
+Nothing here can be revised from a tutorial. **Take it if you want the hardest
+material and the least reading.**
+
+### 2. Slot B — Product Maintenance  ★★★★☆
+
+`lib/spec.php` is 1,228 lines — the largest single file in the project — and
+it implements **EAV** (entity-attribute-value). You will be asked why the
+specifications are not simply columns on `products`, and "it's more flexible"
+is not a sufficient answer; you need the cost side too (specs become a join,
+and the database can no longer type-check the values).
+
+Also carries GD image processing and the configurator that lets a customer's
+choice change the price.
+
+### 3. Slot C — Cart + Checkout  ★★★☆☆
+
+Unusual shape: **one genuinely hard file surrounded by easy ones.**
+`checkout_success.php` is the most consequential code in the project — money
+and stock both move — and it is the only slot using `SELECT ... FOR UPDATE`
+(row locking, so two tabs cannot spend the same stock).
+
+The rest — listings, filtering, the cart — is comfortable. Take it if you want
+one hard thing to master properly rather than many medium ones.
+
+### 4. Slot A — Security + Authorisation  ★★★☆☆
+
+Feels intimidating and is the most *learnable*, because every concept is
+standard and heavily documented: password hashing, CSRF, session fixation,
+role-based access control.
+
+Two things make it easier than it looks: `AUTHORIZATION_TESTING.md` gives you
+ready-made evidence to demonstrate, and the security marks reward showing that
+attacks *fail* — which is easier than explaining how something works.
+
+The one question you must have a real answer to: **why permissions rather than
+role-name checks?** (Because a role name changes and a permission does not; and
+because adding a role must not mean editing every page.)
+
+### 5. Slot E — Member + Profile + Admin tools  ★★☆☆☆
+
+The most files and the most lines, but mostly the **same patterns repeated**:
+list, form, validate, save. Once you understand one CRUD screen you understand
+seven.
+
+The one hard piece is `lib/batch.php` (1,052 lines): the preview-then-commit
+flow with one-use tokens, and optimistic concurrency control in the price
+updater — "what if somebody edited a price between the preview and the
+confirm?"
+
+**Take it if you want steady, predictable work.** Be honest that there is a lot
+of it — this is volume, not difficulty.
+
+---
+
+## How to actually choose
+
+Marks do not scale with difficulty. Basic Modules (30%) and Additional Modules
+(20%) are awarded on **your** area whichever it is, so taking the hardest slot
+earns no bonus. Difficulty only matters for matching the work to the person.
+
+| If you… | Take |
+|---|---|
+| are strongest in the group and want to be stretched | **D** |
+| like database design and want the deepest single topic | **B** |
+| want one hard thing done really well | **C** |
+| are anxious about the viva and want solid ground | **A** |
+| are reliable but less confident, and would rather have volume than puzzles | **E** |
+
+Two warnings from the numbers:
+
+**Do not give D to the weakest member because "it has the fewest files".** It
+has the fewest files *and* the highest concentration of difficult code. That
+combination is a trap.
+
+**Do not give E to somebody short on time.** It is 4,647 lines across 25 files.
+None of it is hard, but all of it has to be read.
+
+---
+
 # Slot A — Security + Authorisation
 
 ### Basic module (4.3)
@@ -100,9 +219,9 @@ lib/product_photo.php  lib/image.php  lib/video.php  lib/spec.php
 | **Customer-selectable variants** | **no — extra** | `admin/product_options.php` |
 | **Apple-style configurator** | **no — extra** | `product_detail.php` |
 | **Nameable product photos** | **no — extra** | `admin/product_photos.php` |
+| Record Listing (Table + Photo View) | yes | `lib/listing_view.php` |
 
 ### Still open — pick from here
-- Record Listing: Table View + Photo View toggle *(in the brief, not yet built)*
 - Product import from a supplier URL
 - Bulk photo re-ordering by drag
 - Product duplication ("save as new")
@@ -137,6 +256,7 @@ lib/cart.php  lib/voucher.php  lib/points.php  lib/store.php
 | Product Filtering (by Price Range) | yes | `products.php` |
 | Filtering, Sorting and Paging combined | yes | `products.php` |
 | Payment (Real — Stripe API) | yes | `checkout.php` |
+| **Payment method recorded (FPX / card / GrabPay)** | **no — extra** | `lib/payment.php` |
 | Discount Voucher Handling | yes | `lib/voucher.php`, `admin/vouchers.php` |
 | Reward Point Handling | yes | `lib/points.php`, `member/points.php` |
 | Permanent Shopping Cart (for Member) | yes | `lib/cart.php` |
@@ -145,9 +265,9 @@ lib/cart.php  lib/voucher.php  lib/points.php  lib/store.php
 | **Product comparison** | **no — extra** | `compare.php` |
 | **Variant-aware cart lines** | **no — extra** | `lib/cart.php` |
 | **Live search suggestions** | **no — extra** | `api/search_suggest.php` |
+| Remember User Preference (dark theme) | yes | `lib/theme.php` |
 
 ### Still open — pick from here
-- Remember User Preference (e.g. dark theme) *(in the brief)*
 - Recently viewed products
 - "Customers also bought" on the product page
 - Save cart for later / multiple named carts
@@ -175,6 +295,7 @@ lib/orders.php  lib/cancellation.php  lib/receipt.php  lib/qrcode.php  lib/addre
 | Order Cancellation (Member) | yes | `order_cancel.php` |
 | Order Status Update (Admin) | yes | `includes/status_actions.php` |
 | E-Receipt (Email or PDF) | yes | `lib/receipt.php` |
+| **Receipt names the payment method** | **no — extra** | `includes/receipt_template.php` |
 | Shipping Address Handling | yes | `lib/address.php` |
 | Generate + Scan QR Code | yes | `lib/qrcode.php`, `admin/qr_scan.php` |
 | **Strict status sequence** | **no — extra** | `lib/orders.php` |
@@ -252,12 +373,10 @@ Free to claim. Roughly hardest last.
 
 | Function | Suggested slot | Rough effort |
 |---|---|---|
-| Record Listing (Table View + Photo View) | B | small |
-| Remember User Preference (e.g. theme) | C | small |
 | SMS Integration (security code) | A | medium — needs a gateway account |
 | Real-Time Chat | E | large — polling or WebSocket |
 
-Only four of the brief's ~44 examples are untouched, so anyone wanting more
+Only two of the brief's ~44 examples are untouched, so anyone wanting more
 should take from the "still open" lists above instead — those are ideas beyond
 the brief, which section 4.4 explicitly invites ("for example, but not limited
 to").

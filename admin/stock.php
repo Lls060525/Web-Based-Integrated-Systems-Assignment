@@ -4,6 +4,48 @@
 //
 // Stock overview, quick adjustments, movement history, and a
 // reconciliation check between products.stock and the ledger.
+//
+// ------------------------------------------------------------
+// TWO PLACES HOLD THE STOCK, AND THAT IS ON PURPOSE
+// ------------------------------------------------------------
+//
+//   products.stock     the current number. One row, read constantly --
+//                      every product page, every add-to-cart, every
+//                      checkout asks "is there any left?"
+//
+//   stock_movements    the ledger. One row per change, with the
+//                      reason, the quantity, who did it and which
+//                      order caused it.
+//
+// This is a deliberate departure from how reward points work. Points
+// have NO balance column -- the balance is summed from the ledger
+// every time (see member/points.php for why). Stock keeps both.
+//
+// The reason is how often each is read. A points balance is looked at
+// when a member opens their points page. Stock is looked at on every
+// product view in the shop, and summing a movement history on each one
+// would be a self-inflicted wound. So stock is denormalised: the
+// running total is cached in a column for speed, and the ledger is
+// kept alongside it for explanation.
+//
+// ------------------------------------------------------------
+// THE PRICE OF THAT DECISION, AND HOW IT IS PAID
+// ------------------------------------------------------------
+//
+// Two copies of a fact can disagree. If a movement is ever written
+// without the column being updated, or the other way round, the shop
+// will believe something about its inventory that is not true -- and
+// nothing will announce it.
+//
+// So this page carries a RECONCILIATION report: it re-sums the ledger
+// for every product and lists any product whose stored stock does not
+// match. That report is not decoration. It is the thing that makes
+// keeping two copies safe rather than merely fast, and it is why
+// adjust_stock() in lib/stock.php writes both inside one transaction.
+//
+// If you are asked at the demo why stock and points are modelled
+// differently, that is the answer: read frequency justifies the cache,
+// and the cache obliges you to check it.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -53,9 +95,26 @@ if (is_post()) {
         } else {
             // The form collects a positive quantity plus a direction,
             // which is harder to get wrong than typing a minus sign.
+            //
+            // A single signed field looks simpler and is worse in
+            // practice: "-5" and "5" are one keystroke apart and mean
+            // opposite things, and a mistyped sign on a stock screen
+            // means a delivery of 50 units recorded as a loss of 50.
+            // Two controls -- an amount and an In/Out choice -- cannot
+            // be confused, and the minus sign is applied here where it
+            // cannot be forgotten.
             $delta = $direction === 'out' ? -$quantity : $quantity;
 
             try {
+                // Writes the ledger row AND updates products.stock, in
+                // one transaction. Both or neither -- see the note at
+                // the top about why the two copies must never diverge.
+                //
+                // It also refuses to take stock below zero, throwing
+                // RuntimeException. That check lives in the library
+                // rather than here because checkout deducts stock too,
+                // and a rule enforced in only one of the two callers
+                // is not a rule.
                 $newStock = adjust_stock($productId, $delta, $type, $reason, current_user_id());
 
                 flash_success($product['name'] . ': stock '
@@ -188,7 +247,7 @@ include __DIR__ . '/../includes/admin_header.php';
             <span class="stat-label">Products Out</span>
         </a>
         <div class="card stat-tile">
-            <span class="stat-icon"><i class="fas fa-sack-dollar"></i></span>
+            <span class="stat-icon"><i class="fas fa-coins"></i></span>
             <span class="stat-value"><?= e(money($overview['stock_value'])) ?></span>
             <span class="stat-label">Stock Value</span>
         </div>

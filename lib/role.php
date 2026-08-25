@@ -296,33 +296,87 @@ function current_role_name(): ?string
  * resolves against it. They used to be three separate lists, which is
  * three chances for one of them to fall out of step with the others.
  *
- * The order matters: it is the sidebar order, and it is also the
- * priority order used when a role has no landing page configured. A
- * role that can do several things lands on the one nearest the top,
- * which is roughly "most likely to be why you signed in".
+ * The order matters TWICE, which is why it is worth thinking about:
  *
- * @return array<string, array{url: string, label: string, icon: string}>
+ *   1. it is the sidebar order
+ *   2. it is the priority order used when a role has no landing page
+ *      configured -- a role that can do several things lands on the one
+ *      nearest the top
+ *
+ * ------------------------------------------------------------
+ * HOW THE ORDER WAS CHOSEN
+ * ------------------------------------------------------------
+ *
+ * Two sensible orderings pull in opposite directions:
+ *
+ *   BY DEPENDENCY   a product needs a category and its specification
+ *                   attributes to exist first, so Categories and Specs
+ *                   ought to come before Products
+ *
+ *   BY FREQUENCY    Orders are worked every day; Categories are set up
+ *                   once and barely touched again, so putting them at
+ *                   the top buries the daily work below them
+ *
+ * Neither wins outright, so the list does both at different levels:
+ *
+ *   GROUPS are ordered by frequency   Orders before Catalogue
+ *   ITEMS inside a group by dependency  Categories -> Specs -> Products
+ *
+ * That also keeps rule 2 sensible. The landing fallback picks the first
+ * openable area, and with groups in frequency order that is the page
+ * somebody is most likely to have signed in to use -- not whichever
+ * setup screen happened to sort first.
+ *
+ * Worth knowing before changing this order: all five seeded roles have
+ * an EXPLICIT landing_permission (migration 26 sets 'dashboard.view'
+ * for the three office roles, migration 27 sets 'qr.scan' for Vendor
+ * and Delivery Man), so reordering cannot move any of them. The
+ * fallback only decides for a custom role somebody creates without
+ * picking a landing page.
+ *
+ * The 'group' key drives the headings in the sidebar. A heading is only
+ * drawn when the group CHANGES while walking the permitted list, so a
+ * group in which a role can open nothing never appears at all -- no
+ * empty "Catalogue" heading for a Delivery Man.
+ *
+ * @return array<string, array{url: string, label: string, icon: string, group: string}>
  */
 function admin_areas(): array
 {
     return [
-        'dashboard.view'     => ['url' => '/admin/dashboard.php',      'label' => 'Dashboard',      'icon' => 'fa-chart-line'],
-        'qr.scan'            => ['url' => '/admin/qr_scan.php',        'label' => 'Scan QR',        'icon' => 'fa-qrcode'],
-        'orders.manage'      => ['url' => '/admin/orders.php',         'label' => 'Orders',         'icon' => 'fa-shopping-cart'],
-        'orders.approve_cancel' => ['url' => '/admin/cancellations.php', 'label' => 'Cancellations', 'icon' => 'fa-ban'],
-        'stock.manage'       => ['url' => '/admin/stock.php',          'label' => 'Stock',          'icon' => 'fa-boxes-stacked'],
-        'products.manage'    => ['url' => '/admin/products.php',       'label' => 'Products',       'icon' => 'fa-box'],
-        'categories.manage'  => ['url' => '/admin/categories.php',     'label' => 'Categories',     'icon' => 'fa-tags'],
-        'specs.manage'       => ['url' => '/admin/specs.php',          'label' => 'Specs',          'icon' => 'fa-list-check'],
-        'batch.manage'       => ['url' => '/admin/batch_import.php',   'label' => 'Batch Tools',    'icon' => 'fa-layer-group'],
-        'reviews.manage'     => ['url' => '/admin/reviews.php',        'label' => 'Reviews',        'icon' => 'fa-star'],
-        'vouchers.manage'    => ['url' => '/admin/vouchers.php',       'label' => 'Vouchers',       'icon' => 'fa-ticket'],
-        'members.manage'     => ['url' => '/admin/members.php',        'label' => 'Members',        'icon' => 'fa-users'],
-        'admins.manage'      => ['url' => '/admin/admins.php',         'label' => 'Admins',         'icon' => 'fa-user-shield'],
-        'roles.manage'       => ['url' => '/admin/roles.php',          'label' => 'Roles',          'icon' => 'fa-key'],
-        'stores.manage'      => ['url' => '/admin/stores.php',         'label' => 'Stores',         'icon' => 'fa-location-dot'],
-        'security.view'      => ['url' => '/admin/login_attempts.php', 'label' => 'Login Security', 'icon' => 'fa-shield-halved'],
-        'mail.test'          => ['url' => '/admin/mail_test.php',      'label' => 'Mail & PDF',     'icon' => 'fa-envelope-circle-check'],
+        // ---- Overview ----
+        'dashboard.view'     => ['group' => 'Overview',  'url' => '/admin/dashboard.php',      'label' => 'Dashboard',      'icon' => 'fa-chart-line'],
+
+        // ---- Orders: the daily work, in the order a parcel moves ----
+        'orders.manage'      => ['group' => 'Orders',    'url' => '/admin/orders.php',         'label' => 'Orders',         'icon' => 'fa-shopping-cart'],
+        'qr.scan'            => ['group' => 'Orders',    'url' => '/admin/qr_scan.php',        'label' => 'Scan QR',        'icon' => 'fa-qrcode'],
+        'orders.approve_cancel' => ['group' => 'Orders', 'url' => '/admin/cancellations.php',  'label' => 'Cancellations',  'icon' => 'fa-ban'],
+
+        // ---- Catalogue: strict dependency order ----
+        // Categories and Specs are what a product is BUILT FROM, so they
+        // come first. Stock is a property of a product that already
+        // exists, and Batch Tools act on products in bulk, so both come
+        // after. Following this order top to bottom is a working recipe
+        // for setting the shop up from empty.
+        'categories.manage'  => ['group' => 'Catalogue', 'url' => '/admin/categories.php',     'label' => 'Categories',     'icon' => 'fa-tags'],
+        'specs.manage'       => ['group' => 'Catalogue', 'url' => '/admin/specs.php',          'label' => 'Specs',          'icon' => 'fa-list-check'],
+        'products.manage'    => ['group' => 'Catalogue', 'url' => '/admin/products.php',       'label' => 'Products',       'icon' => 'fa-box'],
+        'stock.manage'       => ['group' => 'Catalogue', 'url' => '/admin/stock.php',          'label' => 'Stock',          'icon' => 'fa-boxes-stacked'],
+        'batch.manage'       => ['group' => 'Catalogue', 'url' => '/admin/batch_import.php',   'label' => 'Batch Tools',    'icon' => 'fa-layer-group'],
+
+        // ---- Customers ----
+        'members.manage'     => ['group' => 'Customers', 'url' => '/admin/members.php',        'label' => 'Members',        'icon' => 'fa-users'],
+        'reviews.manage'     => ['group' => 'Customers', 'url' => '/admin/reviews.php',        'label' => 'Reviews',        'icon' => 'fa-star'],
+
+        // ---- Marketing ----
+        'vouchers.manage'    => ['group' => 'Marketing', 'url' => '/admin/vouchers.php',       'label' => 'Vouchers',       'icon' => 'fa-ticket'],
+        'stores.manage'      => ['group' => 'Marketing', 'url' => '/admin/stores.php',         'label' => 'Stores',         'icon' => 'fa-location-dot'],
+
+        // ---- System: rarely opened, and mostly by one person ----
+        'admins.manage'      => ['group' => 'System',    'url' => '/admin/admins.php',         'label' => 'Admins',         'icon' => 'fa-user-shield'],
+        'roles.manage'       => ['group' => 'System',    'url' => '/admin/roles.php',          'label' => 'Roles',          'icon' => 'fa-key'],
+        'security.view'      => ['group' => 'System',    'url' => '/admin/login_attempts.php', 'label' => 'Login Security', 'icon' => 'fa-shield-alt'],
+        'mail.test'          => ['group' => 'System',    'url' => '/admin/mail_test.php',      'label' => 'Mail & PDF',     'icon' => 'fa-envelope-open-text'],
     ];
 }
 

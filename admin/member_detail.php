@@ -1,12 +1,40 @@
 <?php
 // ============================================================
 // admin/member_detail.php - Member Detail (Admin)
+//
+// One member, everything about them: profile, order history summary,
+// reward point balance, and a manual point adjustment tool.
+//
+// ------------------------------------------------------------
+// THE FOUR-LINE OPENING EVERY DETAIL PAGE SHARES
+// ------------------------------------------------------------
+//
+// Any page that shows "the thing with this id" has to answer four
+// questions before it can draw anything, and in this order:
+//
+//   1. May the viewer open this page at all?   require_permission()
+//   2. Is an id present, and is it a number?   get_int()
+//   3. Does that row exist?                    db_one()
+//   4. Is it the KIND of row this page is for? the role = 'member' test
+//
+// Skipping any one of them is a real bug, and question 4 is the one
+// that gets forgotten. Look at the WHERE clause below: it is not just
+// "WHERE id = ?". Without "AND role = 'member'", passing the id of an
+// administrator would render an admin account inside the member
+// screen -- complete with a point-adjustment form and a Block button
+// that were never meant to point at staff. Filtering by TYPE in the
+// query, rather than fetching first and checking after, means the
+// wrong kind of row is never in memory to be mishandled.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
 
+// Not is_admin(). A permission, so a role like Order Support can be
+// given order screens without also being handed member records.
 require_permission('members.manage');
 
+// get_int() returns null for a missing id AND for "abc" or "7; DROP".
+// The page therefore never has to consider a non-numeric id.
 $id = get_int('id');
 
 if ($id === null) {
@@ -14,14 +42,30 @@ if ($id === null) {
     redirect('/admin/members.php');
 }
 
+// role = 'member' is load-bearing -- see the note at the top.
 $member = db_one("SELECT * FROM users WHERE id = ? AND role = 'member'", [$id]);
 
 if (!$member) {
+    // Deliberately the same message whether the id does not exist or
+    // belongs to an administrator. Saying "that is an admin, not a
+    // member" would confirm which ids are staff accounts to anyone
+    // who can reach this page.
     flash_error('Member not found.');
     redirect('/admin/members.php');
 }
 
 // A little context: how much has this member actually ordered?
+//
+// Two decisions in one small query:
+//
+//   COALESCE(SUM(...), 0) -- SUM over no rows returns NULL, not 0. A
+//   brand new member would otherwise show a blank lifetime value
+//   rather than RM 0.00. COALESCE turns "no rows" into a real number.
+//
+//   status <> 'cancelled' -- a cancelled order was refunded, so
+//   counting it would overstate both what they bought and what they
+//   are worth. This is a business rule living in a WHERE clause, which
+//   is exactly where it belongs.
 $stats = db_one(
     "SELECT COUNT(*) AS order_count, COALESCE(SUM(total_amount), 0) AS lifetime_value
        FROM orders
@@ -30,31 +74,71 @@ $stats = db_one(
 );
 
 // ---------- Manual point adjustment ----------
+//
+// Staff granting or removing reward points by hand -- goodwill after a
+// complaint, or correcting a mistake.
+//
+// Points are money-adjacent, so this is written as a LEDGER, not as a
+// balance field. Nothing here does "UPDATE users SET points = ...".
+// Instead add_point_transaction() appends a row recording the change,
+// its reason, and who made it, and points_balance() sums those rows.
+//
+// The difference matters. With a single balance column, an adjustment
+// overwrites the evidence of itself: you can see someone has 500
+// points but never how they got there, and two staff adjusting at the
+// same moment silently lose one of the two changes. With a ledger,
+// every change is a row that can be read back months later, and
+// concurrent adjustments are two appends rather than one lost update.
+// It is the same reason accountants do not use pencils.
 if (is_post()) {
     csrf_check();
 
     if (post('action') === 'adjust_points') {
-        $delta  = post_int('points');
+        $delta  = post_int('points');   // may be negative; that is the point
         $reason = post('reason');
 
+        // The guards run in cheapest-first order, and each one returns
+        // a message aimed at what the person can actually do about it.
         if (!points_module_ready()) {
+            // The migration has not been run. Degrade with an
+            // explanation instead of a fatal error about a missing
+            // table -- the same pattern used across this project for
+            // optional features.
             flash_error('Reward points are not set up yet.');
+
         } elseif ($delta === null || $delta === 0) {
+            // Zero is rejected as well as blank: an adjustment of
+            // nothing would write an audit row that says nothing.
             flash_error('Enter a non-zero number of points.');
+
         } elseif ($reason === '') {
+            // The whole value of the ledger is that a future reader can
+            // tell WHY. An adjustment with no reason is a number nobody
+            // will be able to defend later, so it is refused outright.
             flash_error('A reason is required for a manual adjustment.');
+
         } elseif (mb_strlen($reason) > 200) {
+            // mb_strlen, not strlen. strlen counts BYTES, so a reason
+            // written in Chinese would be cut off at roughly 66
+            // characters -- and worse, a limit that disagrees with the
+            // column would throw rather than explain.
             flash_error('The reason must not exceed 200 characters.');
+
         } elseif ($delta < 0 && points_balance($id) + $delta < 0) {
+            // A negative balance is not a state the rest of the system
+            // knows how to handle -- checkout would offer to redeem
+            // points that do not exist. Checked here, at the only place
+            // that can create one.
             flash_error('That would take the balance below zero. Current balance is '
                 . number_format(points_balance($id)) . '.');
+
         } else {
             add_point_transaction(
                 $id,
-                'adjust',
+                'adjust',           // the ledger entry type, next to 'earn' and 'redeem'
                 $delta,
                 $reason,
-                null,
+                null,               // no order attached: this is a manual entry
                 current_user_id()   // who made the adjustment, for the audit trail
             );
 
@@ -62,9 +146,24 @@ if (is_post()) {
         }
     }
 
+    // Post/Redirect/Get, and unconditional -- it runs whether the
+    // adjustment succeeded or failed.
+    //
+    // The result is carried in a flash message, which survives exactly
+    // one redirect, so the outcome is still shown. What is NOT carried
+    // is the POST itself: after this line the browser's current page is
+    // a GET, so refreshing cannot award the same points a second time.
+    // On a page that hands out something of value, that is the
+    // difference between a refresh and a fraud.
     redirect('/admin/member_detail.php?id=' . $id);
 }
 
+// The five most recent orders, for context beside the profile.
+//
+// LIMIT 5 with ORDER BY created_at DESC -- the ORDER BY is what makes
+// the limit meaningful. Without it the database may return any five
+// rows it finds first, which would look like a list of recent orders
+// while being nothing of the kind.
 $recentOrders = db_all(
     'SELECT id, total_amount, status, created_at
        FROM orders WHERE user_id = ? ORDER BY created_at DESC LIMIT 5',

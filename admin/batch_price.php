@@ -4,6 +4,35 @@
 //
 // Repricing in bulk. Choose which products, choose the arithmetic,
 // then read the old -> new table before anything is saved.
+//
+// ------------------------------------------------------------
+// THE PROBLEM THIS PAGE SOLVES TWICE
+// ------------------------------------------------------------
+//
+// A price is the one field a shop cannot afford to get wrong, and a
+// bulk price change is wrong in two different ways at once:
+//
+//   1. The arithmetic might not be what you meant. "+15%" on 80
+//      products produces 80 numbers nobody has read. So step 1 shows
+//      the old and new price of every affected row, and nothing is
+//      written until that table has been looked at.
+//
+//   2. Somebody else might be editing at the same time. You preview
+//      at 10:00, get distracted, confirm at 10:04 -- and in between, a
+//      colleague corrected one of those prices by hand. Applying the
+//      preview blindly would silently overwrite their correction with
+//      arithmetic based on the OLD price.
+//
+// Point 2 is the interesting one, and it is why the staged rows carry
+// the price each product had at preview time. batch_apply_prices()
+// updates a row only if the price it finds still matches; anything
+// that moved underneath is reported as a conflict rather than
+// clobbered. That technique is called optimistic concurrency control
+// -- assume nobody else is editing, but check before writing rather
+// than locking the table for four minutes while you think.
+//
+// The two-step token flow is the same as the other batch tools; see
+// admin/batch_import.php for why parse and write are separated.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -46,6 +75,10 @@ if (is_post()) {
             redirect('/admin/batch_price.php');
         }
 
+        // Each staged row carries id, the price seen at preview time,
+        // and the new price. batch_apply_prices() updates only where
+        // the stored price still equals the previewed one -- see the
+        // note about concurrency at the top of this file.
         $result = batch_apply_prices($staged['rows'], (int)current_user_id());
 
         if (!empty($result['rolled_back'])) {
@@ -70,10 +103,20 @@ if (is_post()) {
 
     // ---------- Step 1: preview ----------
     if ($action === 'preview') {
+        // Checked against the list of operations the library actually
+        // implements, rather than against a list written out again
+        // here. Two copies of "what operations exist" is two things to
+        // keep in step, and the one that gets forgotten is this one.
         if (!array_key_exists($operation, batch_price_operations())) {
             add_err('operation', 'Choose a valid operation.');
         }
 
+        // An unknown ROUNDING mode is corrected rather than rejected.
+        // The difference is deliberate: an invalid operation means the
+        // request is not one this page offers, but rounding is a
+        // refinement -- falling back to "none" gives a sensible result
+        // instead of an error message about something the user is
+        // unlikely to have touched.
         if (!array_key_exists($rounding, batch_rounding_modes())) {
             $rounding = 'none';
         }
@@ -83,6 +126,22 @@ if (is_post()) {
         } else {
             $value = (float)$valueRaw;
 
+            // These bounds are not arithmetic limits -- the maths would
+            // work fine. They are typo traps, sized to what the
+            // operation MEANS:
+            //
+            //   negative        the direction is chosen by the operation
+            //                   ("up" or "down"), so a minus sign here
+            //                   would apply the direction twice
+            //   percent > 100   "+150%" is nearly always meant as
+            //                   "x1.5"; the error names the operation
+            //                   that does what they meant
+            //   factor > 100    multiplying every price by more than a
+            //                   hundred is not a repricing, it is an
+            //                   accident
+            //
+            // A validation message that says what to do instead is
+            // worth far more than one that just says "invalid".
             if ($value < 0) {
                 add_err('value', 'Enter a positive number and pick the direction above.');
             } elseif (in_array($operation, ['percent_up', 'percent_down'], true) && $value > 100) {

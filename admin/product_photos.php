@@ -3,6 +3,46 @@
 // admin/product_photos.php - Photo gallery for one product
 //
 // Multiple upload, drag to reorder, set the cover, delete.
+//
+// ------------------------------------------------------------
+// AN UPLOAD TOUCHES TWO STORES THAT CAN DISAGREE
+// ------------------------------------------------------------
+//
+// A photo exists in two places at once: a FILE on disk and a ROW in
+// product_photos. Neither is much use without the other, and there is
+// no transaction that covers both -- MySQL can roll back a row, but
+// nothing rolls back a file that has been written.
+//
+// So the order of operations is the whole design, and it is chosen so
+// that a failure leaves the SAFER kind of mess:
+//
+//   write the file first, then insert the row
+//     -> a failure leaves a file nobody references. Wasted disk, and
+//        invisible to the shop.
+//
+//   insert the row first, then write the file
+//     -> a failure leaves a row pointing at a file that is not there,
+//        which is a broken image on the storefront.
+//
+// An orphaned file is a cleanup job; a broken image is a customer
+// seeing something wrong. So the file goes first -- and look at the
+// catch block below: when the row insert fails, the file that was
+// just written is deleted rather than abandoned. That is the tidying
+// this ordering obliges us to do.
+//
+// ------------------------------------------------------------
+// TWO RULES THE TABLE CANNOT ENFORCE ITSELF
+// ------------------------------------------------------------
+//
+//   exactly one cover photo per product
+//   sort_order stays contiguous after a delete or a drag
+//
+// Both are statements about a SET of rows rather than about one row,
+// so no column constraint can express them. They are maintained in
+// lib/product_photo.php, and the cover swap is a transaction for the
+// same reason the flagship store is one in admin/stores.php: moving a
+// flag from one row to another takes two statements, and between them
+// the product briefly has no cover at all.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -39,6 +79,27 @@ if (is_post()) {
             // $_FILES['photos'] arrives as parallel arrays because the
             // input is photos[]. Normalising it into one file per
             // iteration keeps save_uploaded_image() unchanged.
+            //
+            // This is a genuine PHP oddity worth understanding, because
+            // it catches everyone once. A single <input type="file">
+            // gives the sensible shape:
+            //
+            //     $_FILES['photo'] = ['name' => 'a.jpg', 'size' => 12, ...]
+            //
+            // But name it photos[] for multiple selection and PHP does
+            // NOT give you a list of those. It TRANSPOSES it:
+            //
+            //     $_FILES['photos'] = [
+            //         'name' => ['a.jpg', 'b.jpg'],
+            //         'size' => [12, 34],
+            //         ...
+            //     ]
+            //
+            // One array per FIELD, not one per file -- so file 2's
+            // details are scattered across five arrays at index 1.
+            // The loop below reassembles each file back into the normal
+            // single-file shape, so save_uploaded_image() never has to
+            // know the difference.
             $files = $_FILES['photos'] ?? null;
 
             if (!$files || !is_array($files['name'])) {
@@ -49,6 +110,11 @@ if (is_post()) {
                 $count    = count($files['name']);
 
                 for ($i = 0; $i < $count; $i++) {
+                    // UPLOAD_ERR_NO_FILE is not a failure -- it is an
+                    // empty slot. A multi-file input reports one of
+                    // these for every position the user left blank, and
+                    // counting them as rejections would tell an admin
+                    // who uploaded two photos that three were refused.
                     if ((int)$files['error'][$i] === UPLOAD_ERR_NO_FILE) {
                         continue;
                     }
@@ -75,8 +141,22 @@ if (is_post()) {
                     } catch (\RuntimeException $ex) {
                         // Over the limit: remove the file we just wrote
                         // rather than leaving it orphaned on disk.
+                        //
+                        // This is the tidying the file-first ordering
+                        // obliges us to do -- see the note at the top.
+                        // The file exists at this point and the row
+                        // does not, so without this line the disk
+                        // slowly fills with images nothing references
+                        // and nothing will ever find them again.
                         delete_uploaded_file(DIR_UPLOAD_PRODUCTS, $filename);
                         flash_error($ex->getMessage());
+
+                        // break, not continue: the only RuntimeException
+                        // here is "this product already has the maximum
+                        // number of photos", and that will be just as
+                        // true for every remaining file. Carrying on
+                        // would write and delete each one in turn and
+                        // stack up identical error messages.
                         break;
                     }
                 }

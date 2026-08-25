@@ -152,6 +152,127 @@ if (!function_exists('admin_empty_row')) {
     }
 
     /** ---------------- Products ---------------- */
+
+    /**
+     * Draw the product listing in whichever layout is in force.
+     *
+     * The page calls THIS rather than picking a renderer itself, because
+     * the AJAX search has to make the same choice and a second copy of
+     * the decision is a second place for it to be made differently. The
+     * symptom of getting it wrong is silent: <tr> markup dropped into a
+     * grid is discarded by the HTML parser, so the search would appear
+     * to return nothing.
+     */
+    function admin_product_listing(array $products, string $view): void
+    {
+        if ($view === 'grid') {
+            admin_product_cards($products);
+            return;
+        }
+
+        admin_product_rows($products);
+    }
+
+    /**
+     * The buttons that act on one product.
+     *
+     * Shared by the table row and the photo card so the two layouts can
+     * never offer different powers over the same record -- which would
+     * turn a cosmetic preference into an authorisation question.
+     */
+    function admin_product_action_buttons(array $p, bool $isActive): void
+    {
+        ?>
+        <a href="/admin/product_form.php?id=<?= (int)$p['id'] ?>" class="btn-outline btn-sm">Edit</a>
+
+        <?php if (photo_gallery_ready()): ?>
+            <a href="/admin/product_photos.php?id=<?= (int)$p['id'] ?>" class="btn-outline btn-sm">
+                <i class="fas fa-images"></i>
+                <?= product_photo_count((int)$p['id']) ?>
+            </a>
+        <?php endif; ?>
+
+        <?php if (spec_module_ready()): ?>
+            <?php $specCount = count(product_specs((int)$p['id'])); ?>
+            <a href="/admin/product_specs.php?id=<?= (int)$p['id'] ?>"
+               class="btn-outline btn-sm <?= $specCount === 0 ? 'is-empty' : '' ?>"
+               title="<?= $specCount === 0 ? 'No specifications recorded' : $specCount . ' specification(s)' ?>">
+                <i class="fas fa-list-check"></i> <?= $specCount ?>
+            </a>
+        <?php endif; ?>
+
+        <form action="/admin/products.php" method="POST" class="inline-form"
+              <?= $isActive ? 'data-confirm="Deactivate this product? Members will no longer see it."' : '' ?>>
+            <?php csrf_field(); ?>
+            <?php html_hidden('action', 'toggle_status'); ?>
+            <?php html_hidden('id', $p['id']); ?>
+            <?php html_hidden('status', $isActive ? 'inactive' : 'active'); ?>
+            <?php html_submit($isActive ? 'Deactivate' : 'Activate', [
+                'class' => 'btn-outline btn-sm ' . ($isActive ? 'btn-danger' : 'btn-success'),
+            ]); ?>
+        </form>
+        <?php
+    }
+
+    /** The stock figure with its Low / Out badge. Shared by both layouts. */
+    function admin_product_stock_cell(array $p): void
+    {
+        $state = stock_state($p);
+        ?>
+        <?= (int)$p['stock'] ?>
+        <?php if ($state === 'out'): ?>
+            <span class="badge badge-danger">Out</span>
+        <?php elseif ($state === 'low'): ?>
+            <span class="badge badge-warning">Low</span>
+        <?php endif; ?>
+        <?php if (reorder_level_ready()): ?>
+            <br><small class="muted">reorder at <?= reorder_level($p) ?></small>
+        <?php endif;
+    }
+
+    /** Products as photo cards. */
+    function admin_product_cards(array $products): void
+    {
+        if (count($products) === 0) {
+            listing_empty('grid', 7, 'No products found.');
+            return;
+        }
+
+        foreach ($products as $p):
+            $isActive = $p['status'] === 'active';
+            ?>
+            <article class="record-card <?= $isActive ? '' : 'is-inactive' ?>">
+                <div class="record-card-img">
+                    <img src="<?= e(product_image($p['image'])) ?>" alt="<?= e($p['name']) ?>" loading="lazy">
+                    <span class="badge <?= $isActive ? 'badge-success' : 'badge-danger' ?> record-card-status">
+                        <?= $isActive ? 'Active' : 'Inactive' ?>
+                    </span>
+                </div>
+
+                <div class="record-card-body">
+                    <h3 class="record-card-title" title="<?= e($p['name']) ?>"><?= e($p['name']) ?></h3>
+
+                    <p class="record-card-meta">
+                        #<?= (int)$p['id'] ?>
+                        &middot; <?= e($p['category_name'] ?: 'Uncategorised') ?>
+                    </p>
+
+                    <p class="record-card-price"><?= e(money($p['price'])) ?></p>
+
+                    <p class="record-card-stock">
+                        <span class="muted">Stock:</span>
+                        <?php admin_product_stock_cell($p); ?>
+                    </p>
+                </div>
+
+                <div class="record-card-actions">
+                    <?php admin_product_action_buttons($p, $isActive); ?>
+                </div>
+            </article>
+        <?php endforeach;
+    }
+
+    /** Products as table rows. */
     function admin_product_rows(array $products): void
     {
         if (count($products) === 0) {
@@ -161,59 +282,19 @@ if (!function_exists('admin_empty_row')) {
 
         foreach ($products as $p):
             $isActive = $p['status'] === 'active';
-            $state    = stock_state($p);
             ?>
             <tr>
                 <td>#<?= (int)$p['id'] ?></td>
                 <td><img src="<?= e(product_image($p['image'])) ?>" alt="" class="table-thumb"></td>
                 <td><strong><?= e($p['name']) ?></strong></td>
                 <td><?= e(money($p['price'])) ?></td>
-                <td>
-                    <?= (int)$p['stock'] ?>
-                    <?php if ($state === 'out'): ?>
-                        <span class="badge badge-danger">Out</span>
-                    <?php elseif ($state === 'low'): ?>
-                        <span class="badge badge-warning">Low</span>
-                    <?php endif; ?>
-                    <?php if (reorder_level_ready()): ?>
-                        <br><small class="muted">reorder at <?= reorder_level($p) ?></small>
-                    <?php endif; ?>
-                </td>
+                <td><?php admin_product_stock_cell($p); ?></td>
                 <td>
                     <span class="badge <?= $isActive ? 'badge-success' : 'badge-danger' ?>">
                         <?= $isActive ? 'Active' : 'Inactive' ?>
                     </span>
                 </td>
-                <td>
-                    <a href="/admin/product_form.php?id=<?= (int)$p['id'] ?>" class="btn-outline btn-sm">Edit</a>
-
-                    <?php if (photo_gallery_ready()): ?>
-                        <a href="/admin/product_photos.php?id=<?= (int)$p['id'] ?>" class="btn-outline btn-sm">
-                            <i class="fas fa-images"></i>
-                            <?= product_photo_count((int)$p['id']) ?>
-                        </a>
-                    <?php endif; ?>
-
-                    <?php if (spec_module_ready()): ?>
-                        <?php $specCount = count(product_specs((int)$p['id'])); ?>
-                        <a href="/admin/product_specs.php?id=<?= (int)$p['id'] ?>"
-                           class="btn-outline btn-sm <?= $specCount === 0 ? 'is-empty' : '' ?>"
-                           title="<?= $specCount === 0 ? 'No specifications recorded' : $specCount . ' specification(s)' ?>">
-                            <i class="fas fa-list-check"></i> <?= $specCount ?>
-                        </a>
-                    <?php endif; ?>
-
-                    <form action="/admin/products.php" method="POST" class="inline-form"
-                          <?= $isActive ? 'data-confirm="Deactivate this product? Members will no longer see it."' : '' ?>>
-                        <?php csrf_field(); ?>
-                        <?php html_hidden('action', 'toggle_status'); ?>
-                        <?php html_hidden('id', $p['id']); ?>
-                        <?php html_hidden('status', $isActive ? 'inactive' : 'active'); ?>
-                        <?php html_submit($isActive ? 'Deactivate' : 'Activate', [
-                            'class' => 'btn-outline btn-sm ' . ($isActive ? 'btn-danger' : 'btn-success'),
-                        ]); ?>
-                    </form>
-                </td>
+                <td><?php admin_product_action_buttons($p, $isActive); ?></td>
             </tr>
         <?php endforeach;
     }

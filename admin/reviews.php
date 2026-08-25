@@ -5,6 +5,40 @@
 // Reviews are hidden rather than deleted. A hidden review still
 // belongs to the customer who wrote it, and hiding is reversible;
 // deleting someone's honest opinion is not.
+//
+// ------------------------------------------------------------
+// WHY HIDE AND NOT DELETE -- THE HARD VERSION OF THE ARGUMENT
+// ------------------------------------------------------------
+//
+// A moderation tool is a shop editing what customers said about its
+// own products. That is a conflict of interest, and the design has to
+// take it seriously rather than assume good intentions.
+//
+// Hiding rather than deleting does three things a delete cannot:
+//
+//   It is reversible. A one-star review hidden in a bad week can be
+//   put back. A deleted one is gone, including the customer's own
+//   copy in member/reviews.php.
+//
+//   It leaves a record. The row is still there, with admin_note
+//   saying who hid it and why. "We removed it because it named a
+//   competitor" is defensible; a gap where a review used to be is
+//   not, because nobody can tell the difference between that and
+//   removing anything below three stars.
+//
+//   It keeps the rating honest -- and this is the part worth
+//   checking in the code. Look at rating_summary() in lib/review.php:
+//   the average is computed over VISIBLE reviews. So hiding does move
+//   the number, which means the note explaining why is not a
+//   formality. It is the only thing separating moderation from
+//   quietly editing the shop's own rating.
+//
+// The same reasoning appears elsewhere in this project: products are
+// deactivated rather than deleted, members are blocked rather than
+// removed. The rule is that anything a CUSTOMER created or that
+// appears in their records gets hidden; only internal data the shop
+// owns outright -- a store location, a spec definition -- is really
+// deleted.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -50,6 +84,17 @@ if (is_post()) {
         flash_error('Invalid request.');
     }
 
+    // Redirect back to the SAME filtered view, not to a bare listing.
+    //
+    // A moderator works through a queue -- "show me pending reviews
+    // mentioning refund" -- and hiding one review should not throw away
+    // the search that found it. Losing the filter after every action
+    // means retyping it dozens of times in a sitting.
+    //
+    // array_filter drops the empty ones so the URL stays clean rather
+    // than accumulating ?filter=&q=, and http_build_query escapes the
+    // search term properly. Concatenating it by hand would break on the
+    // first review containing an ampersand.
     redirect('/admin/reviews.php?' . http_build_query(array_filter([
         'filter' => get('filter'),
         'q'      => get('q'),

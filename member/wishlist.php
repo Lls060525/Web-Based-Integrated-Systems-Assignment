@@ -1,6 +1,39 @@
 <?php
 // ============================================================
 // member/wishlist.php - Favorites / Wishlist (Member)
+//
+// ------------------------------------------------------------
+// THREE ACTIONS ON ONE PAGE
+// ------------------------------------------------------------
+//
+// remove / clear / move_to_cart, told apart by a hidden `action`
+// field. That is the pattern used by every multi-action page in this
+// project: one POST target, a switch on `action`, and a redirect at
+// the end.
+//
+// All three are POST rather than links, and each carries a CSRF
+// token. A GET that changes something -- /wishlist.php?remove=7 --
+// looks harmless and is not: a browser will follow it from an <img>
+// tag on any other site, and a link prefetcher will follow it without
+// anyone clicking. The rule this project holds to is that GET reads
+// and POST changes, with a token proving the request came from a page
+// we served.
+//
+// ------------------------------------------------------------
+// THE INTERESTING ONE IS move_to_cart
+// ------------------------------------------------------------
+//
+// A wishlist is a list of things a customer wanted at some point in
+// the past, so by the time they move it to the cart some of it will
+// have sold out or been withdrawn. The code below deals with that by
+// moving what it can and COUNTING what it could not, then saying so.
+//
+// The two tempting alternatives are both worse. Refusing the whole
+// operation because one item is out of stock punishes the customer
+// for the shop's problem. Moving everything and letting checkout fail
+// later hides the problem until the worst possible moment. Partial
+// success, reported honestly, is the only version that respects what
+// the customer was trying to do.
 // ============================================================
 
 require_once __DIR__ . '/../lib/init.php';
@@ -42,21 +75,40 @@ if (is_post()) {
         $skipped = 0;
 
         foreach ($items as $item) {
+            // Gate 1: is it still sellable at all? A withdrawn product
+            // or one with no stock is skipped and counted.
             if ($item['status'] !== 'active' || (int)$item['stock'] <= 0) {
                 $skipped++;
                 continue;
             }
 
+            // Is it already in the cart? The cart holds ONE row per
+            // product with a quantity, not one row per click -- so
+            // moving a wishlist item the customer already has must add
+            // to the existing line rather than create a duplicate.
             $line = db_one(
                 'SELECT id, quantity FROM cart WHERE user_id = ? AND product_id = ?',
                 [$userId, $item['id']]
             );
 
             if ($line) {
+                // Gate 2, and easy to miss: they may already hold every
+                // unit that exists. Adding one more would put the cart
+                // over available stock, and checkout would refuse it
+                // later with an error the customer cannot act on.
+                // Better to skip and say so now.
                 if ((int)$line['quantity'] >= (int)$item['stock']) {
                     $skipped++;
                     continue;
                 }
+
+                // quantity = quantity + 1, computed by the DATABASE.
+                //
+                // Not "read the value, add one in PHP, write it back".
+                // Two requests doing that both read 2, both write 3,
+                // and one increment is lost. Letting the database do
+                // the arithmetic makes the whole thing a single atomic
+                // statement with nothing to lose.
                 db_exec('UPDATE cart SET quantity = quantity + 1 WHERE id = ?', [$line['id']]);
             } else {
                 db_exec(
@@ -65,6 +117,9 @@ if (is_post()) {
                 );
             }
 
+            // Only after the cart write succeeded. Removing first would
+            // mean a failure between the two lines loses the item from
+            // both places -- the customer's saved item simply gone.
             remove_from_wishlist($userId, (int)$item['id']);
             $moved++;
         }

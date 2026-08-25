@@ -4,6 +4,57 @@
 //
 // This page manages the DEFINITIONS. The values themselves are entered
 // per product on admin/product_specs.php.
+//
+// ------------------------------------------------------------
+// THE PROBLEM: EVERY PRODUCT HAS DIFFERENT SPECIFICATIONS
+// ------------------------------------------------------------
+//
+// A phone has RAM, storage, screen size and battery. A cable has
+// length and wattage. A case has a colour and nothing else. There is
+// no set of columns that fits all three.
+//
+// The obvious answer is to add columns to `products`: ram_gb,
+// storage_gb, screen_inches, cable_length_m... It falls apart quickly.
+// Every new kind of product needs a schema change; the table fills
+// with columns that are NULL for most rows; and adding "water
+// resistance" means an ALTER TABLE on live data because somebody
+// stocked a new model.
+//
+// ------------------------------------------------------------
+// THE ANSWER: EAV -- ENTITY, ATTRIBUTE, VALUE
+// ------------------------------------------------------------
+//
+// Instead of columns, specifications are ROWS in two tables:
+//
+//   spec_attributes   the definitions -- "RAM", measured in GB,
+//                     belongs to the Smartphones category
+//                     (THIS page maintains these)
+//
+//   product_specs     the values -- product 7 has attribute 3 with
+//                     the value "12"
+//                     (admin/product_specs.php maintains these)
+//
+// Adding a new specification is now INSERTING A ROW rather than
+// changing the schema. Products carry only the attributes that apply
+// to them, so nothing is NULL-padded.
+//
+// The cost is honest and worth knowing for the viva: reading a
+// product's specs is a JOIN returning many rows instead of reading
+// columns off one row, and the database can no longer type-check the
+// values -- "12" and "twelve" are both just text. EAV trades the
+// database's help for flexibility. For a catalogue whose product
+// types are not known in advance, that is the right trade; for a
+// fixed, well-understood set of fields it would not be.
+//
+// ------------------------------------------------------------
+// WHY THE DEFINITIONS GET THEIR OWN SCREEN
+// ------------------------------------------------------------
+//
+// Because they are shared. "RAM" is defined once and used by every
+// phone, so the unit, the display order and the category it applies to
+// are stated in one place. Letting each product invent its own
+// attribute names would produce "RAM", "Ram", "Memory" and "RAM (GB)"
+// as four unrelated things, and the comparison page would be useless.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -34,6 +85,23 @@ if (is_post()) {
         } else {
             // The FK cascades, but the count is reported first so the
             // consequence is a decision rather than a surprise.
+            //
+            // Deleting the "RAM" attribute removes the RAM value from
+            // every phone that has one -- ON DELETE CASCADE on
+            // product_specs.attribute_id does that automatically, and
+            // silently. One click, dozens of rows gone, no message.
+            //
+            // So the count is taken BEFORE the delete (afterwards the
+            // rows are already gone and the answer is always 0) purely
+            // so the success message can say how much went with it.
+            //
+            // Note what this deliberately does NOT do: block the
+            // delete. Cascading is correct here -- a RAM value with no
+            // RAM attribute is meaningless data, not history worth
+            // keeping. It is the difference from products, which are
+            // deactivated rather than deleted because an order still
+            // refers to them. The test is always the same: does
+            // anything else depend on this row surviving?
             $used = (int)db_value(
                 'SELECT COUNT(*) FROM product_specs WHERE attribute_id = ?', [$id]
             );

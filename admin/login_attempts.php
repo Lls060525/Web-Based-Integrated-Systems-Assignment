@@ -4,6 +4,51 @@
 //
 // Shows who is currently locked out, lets an admin release a lock,
 // and keeps an audit trail of every sign-in attempt.
+//
+// ------------------------------------------------------------
+// WHAT THIS PAGE IS THE OTHER HALF OF
+// ------------------------------------------------------------
+//
+// lib/login_guard.php does the blocking: after LOGIN_MAX_ATTEMPTS
+// failures an account is refused for a cooling-off period. That is a
+// deliberate denial of service against password guessing -- an
+// attacker trying a dictionary gets three goes, not three million.
+//
+// But an automatic lock needs a manual release, or the security
+// feature becomes the support problem. A real customer who mistypes
+// their password four times is locked out of a shop that has their
+// money. This page is the release valve, and the audit trail that
+// makes the whole thing accountable.
+//
+// ------------------------------------------------------------
+// WHY BLOCK ON EMAIL, AND WHAT THAT COSTS
+// ------------------------------------------------------------
+//
+// Attempts are counted per EMAIL ADDRESS, not per IP.
+//
+// Per-IP sounds better and is not, for a shop: a university campus,
+// an office or a phone network puts hundreds of people behind one
+// address, so one person guessing would lock out everybody, and an
+// attacker with a handful of addresses sidesteps it anyway.
+//
+// The cost of per-email is real and worth being able to state: an
+// attacker who knows your email can lock you out of your own account
+// on purpose. It is a nuisance rather than a breach -- they still
+// cannot get in, and this page releases it in one click -- but it is
+// the trade being made, and "we thought about it and chose this" is a
+// much better answer than not having noticed.
+//
+// ------------------------------------------------------------
+// THE LOG IS PRUNED, NOT KEPT FOREVER
+// ------------------------------------------------------------
+//
+// A row is written on EVERY sign-in attempt, successful or not, so
+// this is the fastest-growing table in the database. Keeping it
+// forever would eventually make the page unusable and the backup
+// enormous, so there is a prune action and a retention period.
+//
+// This is also why the listing is paginated rather than capped at the
+// most recent 100 -- see the note further down.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -57,6 +102,23 @@ $locked = locked_accounts();
 $pager  = paginate(count_login_attempts($q), 25);
 $recent = recent_login_attempts($pager['per_page'], $q, $pager['offset']);
 
+// Last 24 hours, as three numbers from ONE pass over the table.
+//
+// The technique is worth knowing: SUM(CASE WHEN ... THEN 1 ELSE 0 END)
+// is a CONDITIONAL COUNT. SUM adds 1 for every row matching the
+// condition and 0 for the rest, so each expression counts a different
+// subset while the database reads the rows once.
+//
+// The obvious alternative is three separate queries with different
+// WHERE clauses. That is three scans of the busiest table in the
+// database to produce three numbers that belong together -- and
+// because they run at slightly different moments, they can disagree:
+// successes + failures might not equal total if a sign-in happens
+// between two of them. One query cannot be inconsistent with itself.
+//
+// DATE_SUB(NOW(), INTERVAL 1 DAY) is computed by MySQL, not by PHP.
+// Doing it in PHP would use the web server's clock and time zone,
+// which is one more thing that can quietly disagree with the database.
 $stats = db_one(
     'SELECT
         COUNT(*) AS total,

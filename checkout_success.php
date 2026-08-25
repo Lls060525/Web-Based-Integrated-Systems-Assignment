@@ -56,6 +56,30 @@ try {
     $shipping    = $address ? format_address($address) : 'No shipping address recorded';
     $hasAddressId = db_column_exists('orders', 'shipping_address_id');
 
+    // ---------- How it was paid ----------
+    // Asked BEFORE the transaction opens, deliberately.
+    //
+    // This is a second call to Stripe, over the network, and the
+    // transaction below holds FOR UPDATE locks on product rows. Waiting
+    // on a remote server while holding row locks is how a slow third
+    // party turns into failed checkouts for everybody else, so the
+    // network round trip happens while nothing is locked.
+    //
+    // It is a separate call rather than an expansion of the retrieve at
+    // the top of this file because that one decides whether the payment
+    // is real and belongs to this member. That check must stay as small
+    // and as certain as possible; this is decoration, and both of these
+    // functions swallow their own failures and return null. The worst
+    // outcome is a receipt with no "Paid with" line.
+    $paidWith = null;
+    $expandedSession = stripe_session_with_payment($sessionId);
+
+    if ($expandedSession !== null) {
+        $paidWith = payment_details_from_session($expandedSession);
+    }
+
+    $hasPaymentCols = payment_method_ready();
+
     // ---------- 3. Create the order atomically ----------
     db()->beginTransaction();
 
@@ -135,6 +159,18 @@ try {
     if ($hasAddressId && $address !== null) {
         $columns[] = 'shipping_address_id';
         $values[]  = $address['id'];
+    }
+
+    // Written with the order rather than UPDATEd after it, so the row is
+    // complete the first time it exists. The receipt email is sent after
+    // the commit and reads the order back -- an UPDATE afterwards would
+    // race with it and email a receipt missing the line it just gained.
+    if ($hasPaymentCols && $paidWith !== null) {
+        $columns[] = 'payment_method';
+        $values[]  = $paidWith['method'];
+
+        $columns[] = 'payment_detail';
+        $values[]  = $paidWith['detail'];
     }
 
     if ($hasPointsCols) {

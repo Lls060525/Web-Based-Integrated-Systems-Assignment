@@ -4,11 +4,48 @@
 //
 // Members can only ever reach their own orders: ownership is part
 // of the WHERE clause, not an if-statement after the fact.
+//
+// ------------------------------------------------------------
+// THE MOST IMPORTANT LINE ON THIS PAGE
+// ------------------------------------------------------------
+//
+//     $order = find_member_order($orderId, $userId);
+//
+// Two arguments, and the second one is the security of the whole page.
+// Look at the function in lib/orders.php:
+//
+//     SELECT * FROM orders WHERE id = ? AND user_id = ?
+//
+// Ownership is in the QUERY. An order belonging to somebody else is
+// not fetched at all, so it cannot be leaked by a later branch that
+// forgot to check.
+//
+// The tempting alternative is worse in a way that is easy to miss:
+//
+//     $order = find_order($orderId);            // fetch anything
+//     if ($order['user_id'] !== $userId) { … }  // check afterwards
+//
+// That version works, right up until somebody adds a feature above the
+// check -- a page title, a "recently viewed" record, a log line -- and
+// now another customer's data has been used before anyone asked whose
+// it was. This is the class of bug called Insecure Direct Object
+// Reference, and it is found by typing a different number in the URL.
+// Putting ownership in the WHERE clause makes that whole class of
+// mistake impossible rather than merely absent today.
+//
+// The same shape appears in delivery_photo.php and receipt.php: the
+// thing being protected is never loaded unless it belongs to you.
 // ============================================================
 
 require_once __DIR__ . '/lib/init.php';
+
+// Shared render helpers for the timeline and the cancellation panel,
+// used by this page and by admin/order_detail.php so the two views of
+// one order cannot drift apart.
 require_once __DIR__ . '/includes/order_parts.php';
 
+// Members only. An administrator visiting this URL is redirected --
+// they have admin/order_detail.php, which shows the staff view.
 require_member();
 
 $userId  = current_user_id();
@@ -19,16 +56,28 @@ if ($orderId === null) {
     redirect('/orders.php');
 }
 
+// Ownership is enforced inside this call -- see the note above.
 $order = find_member_order($orderId, $userId);
 
 if (!$order) {
+    // "Not found" covers both "no such order" and "not yours", on
+    // purpose. Distinguishing them would turn this page into a way to
+    // discover which order numbers exist.
     flash_error('Order not found.');
     redirect('/orders.php');
 }
 
-$lines      = order_lines($orderId);
-$history    = order_status_history($orderId);
+// Everything below is safe to load unconditionally: reaching this line
+// already proves the order belongs to the signed-in member.
+$lines      = order_lines($orderId);          // the purchased items
+$history    = order_status_history($orderId); // the timeline entries
+
+// Whether to offer the Cancel button. The real rule lives in
+// lib/orders.php; asking it here rather than testing the status
+// inline means the button and the server-side refusal can never
+// disagree about what is cancellable.
 $canCancel  = member_can_cancel($order['status']);
+
 $title      = 'Order #' . $order['id'] . ' - ' . APP_NAME;
 
 include __DIR__ . '/includes/header.php';
@@ -70,6 +119,16 @@ include __DIR__ . '/includes/header.php';
 
                 <dt>Total paid</dt>
                 <dd class="price"><?= e(money($order['total_amount'])) ?></dd>
+
+                <?php $paidWith = payment_method_label($order); ?>
+                <?php if ($paidWith !== null): ?>
+                    <dt>Paid with</dt>
+                    <dd>
+                        <i class="fas <?= e(payment_method_icon((string)$order['payment_method'])) ?>"
+                           aria-hidden="true"></i>
+                        <?= e($paidWith) ?>
+                    </dd>
+                <?php endif; ?>
             </dl>
 
             <h3 class="side-heading">Shipping Address</h3>

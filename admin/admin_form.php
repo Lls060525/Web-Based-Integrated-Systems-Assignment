@@ -5,6 +5,41 @@
 // Add mode : name, email, password, status, optional photo
 // Edit mode: same, except the password is only changed when the
 //            administrator actually types a new one.
+//
+// ------------------------------------------------------------
+// THE INTERESTING PART: YOU CAN LOCK EVERYONE OUT FROM HERE
+// ------------------------------------------------------------
+//
+// This is the only screen in the project that can destroy access to
+// itself. Three ordinary-looking actions each end with nobody able to
+// administer the shop again:
+//
+//   deactivate your own account          -> logged out, cannot return
+//   deactivate the last active admin     -> nobody can sign in at all
+//   remove the last role holding
+//     admins.manage or roles.manage      -> everyone still signs in,
+//                                           and nobody can fix it
+//
+// The third is the nasty one, because nothing appears broken. Every
+// account works; the Manage Admins page has simply become
+// unreachable, and there is no way back through the interface. The
+// recovery is an UPDATE in phpMyAdmin -- which is not a recovery for
+// anyone who does not have that access.
+//
+// So all three are refused, and each refusal is written as a
+// validation error rather than a crash, because the administrator has
+// not done anything stupid. They have done something reasonable that
+// happens to be irreversible.
+//
+// ------------------------------------------------------------
+// A CHECK ABOUT THE EDITED ACCOUNT, NOT THE EDITOR
+// ------------------------------------------------------------
+//
+// Worth noticing in role_assignment_lockout_reason() below: it asks
+// about the account BEING EDITED, not about whoever is doing the
+// editing. Demoting a colleague removes exactly the same permission
+// from the system as demoting yourself. A guard that only protected
+// the current user would feel safe and would not be.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -78,10 +113,30 @@ if (is_post()) {
     }
 
     // ---------- Business rules ----------
+    //
+    // Lockout guard 1: your own account.
+    // Deactivating yourself takes effect on the next request, so the
+    // page you would land on is the login screen, refusing you.
     if ($isSelf && $status !== 'active') {
         add_err('status', 'You cannot deactivate your own account.');
     }
 
+    // Lockout guard 2: the last active administrator.
+    //
+    // Read the four conditions -- each removes a case where the check
+    // would be wrong rather than merely unnecessary:
+    //
+    //   $isEdit                    adding a new admin cannot reduce the count
+    //   !$isSelf                   guard 1 already covers yourself, and a
+    //                              second message about the same field
+    //                              would be confusing
+    //   status === 'active'        they were already inactive, so this
+    //                              save does not change the count
+    //   $status !== 'active'       we are actually deactivating
+    //
+    // active_admin_count() is asked LAST because it is the only one
+    // that queries the database. && short-circuits, so on a normal save
+    // the query never runs.
     if ($isEdit && !$isSelf && $account['status'] === 'active' && $status !== 'active'
         && active_admin_count() <= 1) {
         add_err('status', 'This is the last active administrator and must stay active.');

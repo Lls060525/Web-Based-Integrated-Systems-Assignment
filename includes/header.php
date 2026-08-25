@@ -2,26 +2,81 @@
 // ============================================================
 // includes/header.php - storefront layout (top half)
 // Closed by includes/footer.php
+//
+// ------------------------------------------------------------
+// THE SANDWICH
+// ------------------------------------------------------------
+//
+// Every storefront page is written as:
+//
+//     ...gather data, handle POST, redirect if needed...
+//     include header.php     <- opens <html>, prints the nav
+//     ...the page's own HTML...
+//     include footer.php     <- closes everything
+//
+// This file opens tags that footer.php closes, which is why the two
+// are never included separately and why nothing may be echoed before
+// the include. Anything printed earlier lands outside <html>, and --
+// more seriously -- sends the response headers, after which no page
+// can redirect, set a cookie, or start a session. That is the reason
+// every page in this project does its thinking BEFORE its printing.
+//
+// The admin area has its own pair, includes/admin_header.php and
+// admin_footer.php, with the sidebar instead of the shop nav.
+//
+// ------------------------------------------------------------
+// WHY THE COUNTS ARE FETCHED HERE
+// ------------------------------------------------------------
+//
+// The cart, wishlist and points badges appear on EVERY page, so they
+// are gathered once in the layout rather than by each page. If each
+// page fetched its own, half of them would forget and the badge would
+// flicker between a number and nothing as you browsed.
 // ============================================================
 
+// Every page reaches the library through this line, which is why a
+// page can simply include the header and have e(), db_one(), can()
+// and the rest already loaded.
 require_once __DIR__ . '/../lib/init.php';
 
+// ?? means "unless the page already set it". This is how a shared
+// layout takes an optional argument: the page assigns $title before
+// the include, and gets a sensible default if it does not.
 $title       = $title ?? APP_NAME . ' - Online Shop';
+
+// Set by login/register so the nav can hide links that would be
+// distracting mid sign-up.
 $is_auth_page = $is_auth_page ?? false;
 
 // Live cart badge for members (single shared connection - no new PDO here).
+//
+// Declared as 0 FIRST, then filled in only for members. The markup
+// below prints them unconditionally, so they have to exist for guests
+// too -- an undefined variable would print a PHP warning into the
+// page for every visitor who is not signed in.
 $cart_count     = 0;
 $wishlist_total = 0;
 $points_total   = 0;
 
 if (is_member()) {
+    // SUM(quantity), not COUNT(*). The badge means "how many items",
+    // and three of one phone is three items in one row -- COUNT would
+    // show 1 while the cart page showed 3.
+    //
+    // COALESCE because SUM over an empty cart returns NULL, not 0, and
+    // (int)null is 0 only by luck. Being explicit means the badge says
+    // 0 rather than depending on a cast.
     $cart_count     = (int)db_value('SELECT COALESCE(SUM(quantity), 0) FROM cart WHERE user_id = ?', [current_user_id()]);
     $wishlist_total = wishlist_count();
     $points_total   = points_balance();
 }
 ?>
 <!doctype html>
-<html lang="en">
+<?php /* The theme is printed on the very first tag of the response, so
+         the page never exists without knowing its own colours. Doing
+         this in JavaScript instead is what produces the white flash
+         before a dark site settles down. See lib/theme.php. */ ?>
+<html lang="en" data-theme="<?= e(theme_attribute()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -150,6 +205,12 @@ if (is_member()) {
                     </a>
                 <?php endif; ?>
             <?php endif; ?>
+
+            <?php /* Outside the !$is_auth_page guard on purpose: the login
+                     and register pages are exactly where somebody meets the
+                     site for the first time, and a person who needs dark
+                     mode needs it there too. */ ?>
+            <?php theme_switcher(); ?>
         </nav>
     </div>
 </header>

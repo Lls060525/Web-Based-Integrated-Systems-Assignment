@@ -1,6 +1,45 @@
 <?php
 // ============================================================
 // admin/spec_form.php - Add / edit a specification attribute
+//
+// Defines ONE specification -- "RAM", measured in GB, applying to
+// Smartphones. Read the header of admin/specs.php first for what EAV
+// is and why the definitions live apart from the values.
+//
+// ------------------------------------------------------------
+// WHAT AN ATTRIBUTE CARRIES, AND WHY EACH FIELD EARNS ITS PLACE
+// ------------------------------------------------------------
+//
+//   name           what a human reads: "RAM"
+//   code           the slug used in URLs and filters: "ram"
+//   category_id    which products it applies to; NULL = all of them
+//   data_type      text | number | enum -- decides how it is entered
+//   unit           "GB", only meaningful on a number
+//   options        the choice list, only meaningful on an enum
+//   is_filterable  offer it as a filter on the listing page
+//   is_comparable  show it on the comparison page
+//   is_selectable  the customer PICKS this, and it can change price
+//   sort_order     the order specifications are displayed in
+//
+// The three type-dependent fields are the interesting part. unit and
+// options only apply to certain data_types, and the code below CLEARS
+// them when they do not apply rather than leaving them behind. Look
+// for that pattern -- it appears in voucher_form.php too, with
+// max_discount on a fixed-amount voucher. Data that cannot be
+// misinterpreted is worth more than data that merely happens to be
+// ignored today.
+//
+// ------------------------------------------------------------
+// is_selectable IS THE ONE THAT CHANGES THE SHOP
+// ------------------------------------------------------------
+//
+// A normal attribute is INFORMATION: "this phone has 12 GB of RAM".
+// A selectable one is a CHOICE the customer makes at purchase time,
+// with a price difference attached -- 256 GB or 512 GB, and the second
+// costs more. That is what turns the product page into a configurator
+// and what makes the cart store an options signature alongside the
+// product id. See admin/product_options.php for where the choices and
+// their price deltas are entered.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -162,144 +201,12 @@ if (is_post()) {
         redirect('/admin/specs.php');
     }
 
-    $attribute = $found;
     // Validation failed. Answer with a redirect rather than a page, so
     // the browser's history entry is a GET and F5 cannot resubmit.
-    // The errors and what was typed are carried across the redirect.
+    // The errors and what was typed are carried across the redirect --
+    // prg_restore() in lib/init.php puts them back on the way in, and
+    // old() reads them when the form is redrawn.
     redirect_back();
-}
-
-$title = ($isEdit ? 'Edit' : 'Add') . ' Attribute - Admin';
-
-$categories      = db_all('SELECT id, name FROM categories ORDER BY name ASC');
-$categoryOptions = ['' => 'All categories (global)'] + array_column($categories, 'name', 'id');
-
-if (is_post()) {
-    csrf_check();
-
-    $name       = post('name');
-    $categoryId = post('category_id') === '' ? null : post_int('category_id');
-    $dataType   = post('data_type');
-    $unit       = post('unit');
-    $options    = post('options');
-    $sortOrder  = post('sort_order', '100');
-    $filterable = post('is_filterable') === '1' ? 1 : 0;
-    $comparable = post('is_comparable') === '1' ? 1 : 0;
-    $selectable  = spec_options_ready() && post('is_selectable') === '1' ? 1 : 0;
-    $renderStyle = post('render_style', 'tile');
-
-    if (!array_key_exists($renderStyle, spec_render_styles())) {
-        $renderStyle = 'tile';
-    }
-
-    if (v_required('name', $name, 'Attribute name')) {
-        v_max('name', $name, 80, 'Attribute name');
-    }
-
-    v_in('data_type', $dataType, array_keys(spec_data_types()), 'Type');
-    v_max('unit', $unit, 20, 'Unit');
-    v_integer('sort_order', $sortOrder, 0, 9999, 'Sort order');
-
-    if ($dataType === 'enum') {
-        $list = array_filter(array_map('trim', explode(',', $options)));
-
-        if (count($list) < 2) {
-            add_err('options', 'A choice list needs at least two options, separated by commas.');
-        } else {
-            $options = implode(',', $list);
-        }
-    } else {
-        // Cleared rather than kept: leaving a stale list on a text
-        // attribute would resurface if the type were switched back.
-        $options = '';
-    }
-
-    // A unit only means something on a number.
-    if ($dataType !== 'number') {
-        $unit = '';
-    }
-
-    $code = spec_slug($name);
-
-    if ($code === '') {
-        add_err('name', 'The name must contain at least one letter or number.');
-    }
-
-    // UNIQUE is on (category_id, code), so the same code may exist under
-    // a different category. NULL never equals NULL in SQL, so global
-    // attributes are checked with IS NULL rather than = ?.
-    if (no_err()) {
-        $clash = $categoryId === null
-            ? db_one('SELECT id FROM spec_attributes WHERE code = ? AND category_id IS NULL AND id <> ?',
-                     [$code, $attributeId ?? 0])
-            : db_one('SELECT id FROM spec_attributes WHERE code = ? AND category_id = ? AND id <> ?',
-                     [$code, $categoryId, $attributeId ?? 0]);
-
-        if ($clash) {
-            add_err('name', 'An attribute with that name already exists for this category.');
-        }
-    }
-
-    if (no_err()) {
-        if ($isEdit) {
-            db_exec(
-                'UPDATE spec_attributes
-                    SET name = ?, code = ?, category_id = ?, data_type = ?, unit = ?,
-                        options = ?, is_filterable = ?, is_comparable = ?, sort_order = ?'
-                    . (spec_options_ready() ? ', is_selectable = ?' : '')
-                    . (spec_render_ready()  ? ', render_style = ?' : '') . '
-                  WHERE id = ?',
-                spec_render_ready()
-                    ? [$name, $code, $categoryId, $dataType, $unit ?: null, $options ?: null,
-                       $filterable, $comparable, (int)$sortOrder, $selectable, $renderStyle, $attributeId]
-                    : (spec_options_ready()
-                    ? [$name, $code, $categoryId, $dataType, $unit ?: null, $options ?: null,
-                       $filterable, $comparable, (int)$sortOrder, $selectable, $attributeId]
-                    : [$name, $code, $categoryId, $dataType, $unit ?: null, $options ?: null,
-                       $filterable, $comparable, (int)$sortOrder, $attributeId])
-            );
-
-            flash_success('Attribute updated.');
-
-        } else {
-            db_exec(
-                'INSERT INTO spec_attributes
-                        (name, code, category_id, data_type, unit, options,
-                         is_filterable, is_comparable, sort_order'
-                    . (spec_options_ready() ? ', is_selectable' : '')
-                    . (spec_render_ready()  ? ', render_style' : '') . ')
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?'
-                    . (spec_options_ready() ? ', ?' : '')
-                    . (spec_render_ready()  ? ', ?' : '') . ')',
-                spec_render_ready()
-                    ? [$name, $code, $categoryId, $dataType, $unit ?: null, $options ?: null,
-                       $filterable, $comparable, (int)$sortOrder, $selectable, $renderStyle]
-                    : (spec_options_ready()
-                    ? [$name, $code, $categoryId, $dataType, $unit ?: null, $options ?: null,
-                       $filterable, $comparable, (int)$sortOrder, $selectable]
-                    : [$name, $code, $categoryId, $dataType, $unit ?: null, $options ?: null,
-                       $filterable, $comparable, (int)$sortOrder])
-            );
-
-            flash_success('Attribute added.');
-        }
-
-        redirect('/admin/specs.php');
-    }
-
-    // Keep what was typed so the form can be redrawn with it.
-    $attribute = array_merge($attribute, [
-        'render_style'  => $renderStyle,
-        'is_selectable' => $selectable,
-        'name'          => $name,
-        'category_id'   => $categoryId,
-        'data_type'     => $dataType,
-        'unit'          => $unit,
-        'options'       => $options,
-        'is_filterable' => $filterable,
-        'is_comparable' => $comparable,
-        'sort_order'    => $sortOrder,
-    ]);
 }
 
 include __DIR__ . '/../includes/admin_header.php';

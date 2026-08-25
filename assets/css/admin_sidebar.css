@@ -3,7 +3,7 @@ body {
     margin: 0;
     padding: 0;
     overflow-x: hidden;
-    background-color: #f4f6f9;
+    background-color: var(--bg-color);
 }
 
 .admin-wrapper {
@@ -69,7 +69,7 @@ body {
     align-items: center;
     justify-content: space-between;
     padding: 10px 20px;
-    background: #fff;
+    background: var(--surface);
     box-shadow: 0 2px 4px rgba(0,0,0,0.08);
     z-index: 999;
 }
@@ -132,7 +132,7 @@ body {
 }
 .profile-content {
     flex: 1;
-    background: #fff;
+    background: var(--surface);
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     padding: 40px;
@@ -142,7 +142,7 @@ body {
 .profile-img-container {
     text-align: center;
     padding: 0 20px 20px 20px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border);
 }
 .profile-img {
     width: 120px;
@@ -151,23 +151,23 @@ body {
     object-fit: cover;
     background-color: #d122e3;
     margin-bottom: 15px;
-    border: 2px solid #fff;
+    border: 2px solid var(--surface);
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
 }
 .btn-select-image {
     display: inline-block;
     padding: 8px 16px;
-    border: 1px solid #ddd;
-    background: #fff;
+    border: 1px solid var(--border);
+    background: var(--surface);
     border-radius: 4px;
     cursor: pointer;
     font-size: 14px;
-    color: #555;
+    color: var(--text-muted);
     transition: all 0.2s;
 }
 .btn-select-image:hover {
-    background: #f9f9f9;
-    border-color: #ccc;
+    background: var(--surface-2);
+    border-color: var(--border-strong);
 }
 
 /* Sidebar Navigation */
@@ -180,17 +180,17 @@ body {
 .profile-nav-item {
     padding: 12px 20px;
     text-decoration: none;
-    color: #333;
+    color: var(--text-main);
     font-size: 16px;
     border-radius: 6px;
     transition: all 0.2s;
 }
 .profile-nav-item:hover {
-    background-color: #f8f9fa;
+    background-color: var(--surface-2);
 }
 .profile-nav-item.active {
-    background-color: #fdf2ef;
-    color: #ef5332;
+    background-color: var(--primary-bg);
+    color: var(--primary);
     font-weight: 500;
 }
 
@@ -200,14 +200,14 @@ body {
     font-weight: bold;
     margin-top: 0;
     margin-bottom: 5px;
-    color: #222;
+    color: var(--text-main);
 }
 .content-subtitle {
-    color: #777;
+    color: var(--text-muted);
     font-size: 14px;
     margin-bottom: 25px;
     padding-bottom: 15px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid var(--border);
 }
 .form-group {
     margin-bottom: 20px;
@@ -216,7 +216,7 @@ body {
     display: block;
     font-weight: 500;
     margin-bottom: 8px;
-    color: #333;
+    color: var(--text-main);
 }
 /* .form-control is defined once, in style.css.
  *
@@ -225,12 +225,12 @@ body {
  * the theme variables -- meaning they would not follow a colour change.
  * Removing it makes every input in the project the same control. */
 .form-control:focus {
-    border-color: #ef5332;
+    border-color: var(--primary);
     outline: none;
 }
 .btn-submit-orange {
-    background-color: #ef5332;
-    color: #fff;
+    background-color: var(--primary);
+    color: var(--surface);
     border: none;
     padding: 14px;
     width: 100%;
@@ -266,7 +266,7 @@ body {
   border: none;
   font-size: 20px;
   cursor: pointer;
-  color: var(--text-main, #333);
+  color: var(--text-main, var(--text-main));
   padding: 4px 8px;
   border-radius: 4px;
 }
@@ -284,7 +284,7 @@ body {
   align-items: center;
   gap: 10px;
   text-decoration: none;
-  color: #333;
+  color: var(--text-main);
   padding: 4px 10px;
   border-radius: 6px;
   transition: background .2s ease;
@@ -296,7 +296,7 @@ body {
   height: 35px;
   border-radius: 50%;
   object-fit: cover;
-  border: 1px solid #ddd;
+  border: 1px solid var(--border);
   background: #fafafa;
 }
 
@@ -304,7 +304,7 @@ body {
 
 .topbar-divider {
   height: 24px;
-  border-left: 1px solid #ddd;
+  border-left: 1px solid var(--border);
 }
 
 .topbar-logout {
@@ -350,22 +350,71 @@ body {
         box-shadow: 2px 0 12px rgba(0, 0, 0, .25);
     }
 
-    /* Starts hidden. The toggle button in the topbar reveals it. */
+    /* Starts hidden. The toggle button in the topbar reveals it.
+     *
+     * transform, NOT margin-left.
+     *
+     * The desktop .collapsed state animates margin because there it has
+     * to: the content column genuinely reflows to fill the space. Here
+     * the sidebar is position: fixed and out of the flow, so no reflow
+     * is wanted -- and animating margin makes the browser recalculate
+     * layout on every frame of the slide, which is precisely the
+     * stutter that makes a drawer feel cheap on a phone. A transform is
+     * handed to the compositor and costs the layout engine nothing.
+     *
+     * margin-left is reset to 0 so the desktop rule cannot leak in at
+     * the moment the viewport crosses the breakpoint. */
+    /* .collapsed is the DESKTOP state and is cleared by the resize
+     * handler in admin.js when the breakpoint is crossed. It is
+     * neutralised here as well because .admin-sidebar.collapsed
+     * out-specifies .admin-sidebar: were one ever left behind, its
+     * -250px margin would stack on top of the translate and put the
+     * drawer two widths off-screen, where it would open to nothing.
+     * Two lines to make a whole class of bug impossible. */
+    .admin-sidebar,
+    .admin-sidebar.collapsed {
+        margin-left: 0;
+        transition: transform .28s cubic-bezier(.4, 0, .2, 1),
+                    box-shadow .28s ease;
+        will-change: transform;
+    }
+
     .admin-sidebar:not(.is-open) {
-        margin-left: -250px;
+        transform: translateX(-100%);
         box-shadow: none;
+    }
+
+    .admin-sidebar.is-open {
+        transform: translateX(0);
     }
 
     .admin-main-content { width: 100%; }
 
     /* Dimmed backdrop, so it is obvious the sidebar is a layer and
-       tapping anywhere else closes it. */
-    .admin-sidebar.is-open + .admin-main-content::before {
+       tapping anywhere else closes it.
+     *
+     * Always present, rather than appearing with the class, because an
+     * element cannot transition into existence -- a backdrop created at
+     * the moment it is needed simply appears, and a black sheet
+     * appearing instantly over the page is jarring. So it exists from
+     * the start at zero opacity and fades.
+     *
+     * pointer-events: none while closed is what stops that invisible
+     * full-screen sheet from swallowing every tap on the page. */
+    .admin-main-content::before {
         content: "";
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, .45);
         z-index: 999;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity .28s ease;
+    }
+
+    .admin-sidebar.is-open + .admin-main-content::before {
+        opacity: 1;
+        pointer-events: auto;
     }
 
     .admin-topbar { position: sticky; top: 0; z-index: 900; }
@@ -506,4 +555,46 @@ body {
     font-weight: 700;
     text-align: center;
     line-height: 18px;
+}
+
+/* ============================================================
+   Sidebar group headings
+   ------------------------------------------------------------
+   Seventeen links in one flat column is more than anyone scans; the
+   headings turn it into five short lists. Emitted by
+   includes/admin_header.php whenever the group changes, so a group a
+   role cannot open never appears.
+   ============================================================ */
+.sidebar-group {
+  margin: 18px 0 4px;
+  padding: 0 20px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .9px;
+  text-transform: uppercase;
+  /* Deliberately quiet. A heading that competes with the links it
+     labels makes the menu harder to read, not easier -- these are
+     signposts, not destinations. */
+  color: rgba(255, 255, 255, .38);
+  user-select: none;
+}
+
+/* No gap above the first one; it would push the whole menu down. */
+.sidebar-group:first-child { margin-top: 6px; }
+
+/* ---------- Collapsed sidebar (icons only) ----------
+   The label text has to go, exactly like .nav-label -- otherwise the
+   headings are the only words left in a strip of icons, which looks
+   like a rendering fault.
+
+   A rule keeps the grouping visible: the eye still gets the break
+   between sections, without needing to read anything. */
+.admin-sidebar.collapsed .sidebar-group {
+  padding: 0;
+  margin: 10px 12px;
+  height: 1px;
+  overflow: hidden;          /* clips the text rather than hiding the box */
+  text-indent: -999px;       /* belt and braces for screen widths that
+                                still compute a width for the text */
+  background: rgba(255, 255, 255, .13);
 }

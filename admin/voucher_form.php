@@ -1,6 +1,42 @@
 <?php
 // ============================================================
 // admin/voucher_form.php - Create / edit a discount voucher
+//
+// ------------------------------------------------------------
+// ONE FILE, TWO JOBS
+// ------------------------------------------------------------
+//
+// This is the "add" form and the "edit" form at once, and $isEdit is
+// the only thing that tells them apart:
+//
+//   /admin/voucher_form.php          -> $id is null  -> creating
+//   /admin/voucher_form.php?id=4     -> $id is 4     -> editing
+//
+// They are one file because the two would otherwise be near-identical
+// twins: same fifteen fields, same validation, same layout. Two copies
+// means every future rule has to be written twice, and the day
+// somebody updates only one of them the add form starts accepting
+// something the edit form rejects. The same pattern is used by
+// product_form.php, store_form.php and spec_form.php.
+//
+// The technique that makes it work is the $voucher array below. It is
+// filled with DEFAULTS first, then overwritten from the database when
+// editing. From that point on the HTML at the bottom just prints
+// $voucher without caring which mode it is in.
+//
+// ------------------------------------------------------------
+// WHERE THE VALIDATION LIVES
+// ------------------------------------------------------------
+//
+// Everything is checked HERE, on the server, after the POST. The
+// required and pattern attributes in the HTML are a convenience for
+// the person typing -- they are enforced by the browser, and a browser
+// is the one part of this system an attacker controls completely.
+// Anything that matters is re-checked below.
+//
+// The v_* helpers (v_required, v_number, v_in, v_max) come from
+// lib/validation.php. Each records a message against a field name via
+// add_err(), and the form redisplays them beside the right input.
 // ============================================================
 
 require_once __DIR__ . '/admin_auth.php';
@@ -17,6 +53,17 @@ if (!voucher_module_ready()) {
 $id     = get_int('id');
 $isEdit = $id !== null;
 
+// The shape of a voucher, with the defaults a NEW one starts from.
+//
+// Declaring every key here, even the empty ones, is what lets the HTML
+// at the bottom write $voucher['max_discount'] unconditionally. Build
+// this array only when editing and every field in the form would need
+// a ?? '' beside it, and the one that gets forgotten becomes a PHP
+// warning printed into the page.
+//
+// The two dates are chosen rather than blank because a voucher with no
+// dates is the least useful thing to hand somebody: valid from today,
+// expiring in a month, is what a promotion usually is.
 $voucher = [
     'code'           => '',
     'description'    => '',
@@ -40,8 +87,17 @@ if ($isEdit) {
         redirect('/admin/vouchers.php');
     }
 
+    // Replaces the defaults wholesale. Everything downstream now reads
+    // the stored voucher without knowing anything changed.
     $voucher = $found;
+
     // Date inputs want Y-m-d, the database holds a full datetime.
+    //
+    // <input type="date"> silently shows EMPTY when handed
+    // "2026-08-25 14:30:00" -- it does not complain, it just appears
+    // blank. Saving the form then wipes a date that was set. Trimming
+    // the time off here is what keeps an edit from quietly destroying
+    // data the admin never touched.
     $voucher['starts_at']  = !empty($found['starts_at'])  ? date('Y-m-d', strtotime($found['starts_at']))  : '';
     $voucher['expires_at'] = !empty($found['expires_at']) ? date('Y-m-d', strtotime($found['expires_at'])) : '';
 }
@@ -65,10 +121,37 @@ if (is_post()) {
     $status      = post('status');
 
     // ---------- Code ----------
+    //
+    // Three checks, nested so each only runs if the previous passed --
+    // there is no point asking whether "" is already taken.
     if (v_required('code', $code, 'Voucher code')) {
+
+        // Uppercased at the top of this block, so "save10" and "SAVE10"
+        // are the same voucher. A customer typing a code on a phone
+        // gets whatever autocorrect gives them; the code is normalised
+        // once here rather than compared case-insensitively in five
+        // different places later.
+        //
+        // The character set is restricted for a practical reason: this
+        // code gets read aloud, printed on posters and typed by hand.
+        // Allowing spaces or punctuation invites codes nobody can
+        // enter correctly.
         if (!preg_match('/^[A-Z0-9_-]{3,30}$/', $code)) {
             add_err('code', 'Use 3 to 30 characters: letters, digits, hyphen or underscore only.');
         } else {
+            // ---- The uniqueness check, and the clause that makes
+            //      editing possible ----
+            //
+            // "Is any other voucher already using this code?"
+            //
+            // AND id <> ? is the important half. When editing voucher
+            // 4, voucher 4 itself obviously has this code -- without
+            // excluding it, saving the form without touching the code
+            // would report "already in use" and refuse to save. The
+            // form would be impossible to submit twice.
+            //
+            // This exact pattern appears in every edit form that has a
+            // unique field: exclude yourself, then ask.
             $dupSql    = 'SELECT id FROM vouchers WHERE code = ?';
             $dupParams = [$code];
 
@@ -88,15 +171,40 @@ if (is_post()) {
     v_in('status', $status, ['active', 'inactive'], 'Status');
 
     // ---------- Value, meaning depends on the type ----------
+    //
+    // One column, two meanings. `value` holds 15 for "15% off" and 15
+    // for "RM 15 off", and only `type` says which -- so the bounds
+    // have to be chosen per type, not once for the column.
+    //
+    // This is worth noticing as a design point: the alternative is two
+    // nullable columns (percent_value, fixed_value) where exactly one
+    // is filled, which pushes "which one is set" into every query that
+    // ever touches a voucher. One value plus a type keeps that
+    // decision in a single place.
     if ($type === 'percent') {
+        // Capped at 100: a discount over 100% would pay the customer.
         v_number('value', $value, 0.01, 100, 'Percentage');
 
+        // max_discount only means something for a percentage -- it is
+        // the cap that stops "20% off" costing RM 1,400 on a flagship
+        // phone. Optional, so blank is allowed and only a non-numeric
+        // value is an error.
         if ($maxDiscount !== '' && !is_numeric($maxDiscount)) {
             add_err('max_discount', 'Maximum discount must be a number, or left blank for no cap.');
         }
     } else {
         v_number('value', $value, 0.01, 999999, 'Discount amount');
-        $maxDiscount = '';   // meaningless for a fixed amount
+
+        // Cleared rather than ignored.
+        //
+        // "A cap on a fixed RM 15 discount" is not a thing, so leaving
+        // whatever was typed in the box would store a number that
+        // means nothing -- and the next person to read the row would
+        // reasonably wonder whether it was being applied. Blanking it
+        // here means the stored voucher can only be interpreted one
+        // way. Data that cannot be misread beats data that merely
+        // happens to be unused.
+        $maxDiscount = '';
     }
 
     if (!is_numeric($minSpend) || (float)$minSpend < 0) {
