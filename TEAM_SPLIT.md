@@ -35,28 +35,48 @@ security, input validation) is team-wide.
 The five slots are **not** equally hard, and the hard one is not the big one.
 Measured across the files each slot owns:
 
-| | Slot | Lines | Files | Transactions | Per 1000 lines | Verdict |
-|---|---|---|---|---|---|---|
-| 1 | **D** Orders + Fulfilment | 1,831 | 12 | 5 | **2.73** | Hardest to explain, least to read |
-| 2 | **B** Product Maintenance | 3,551 | 14 | 6 | 1.69 | Hard concept, large surface |
-| 3 | **C** Cart + Checkout | 2,751 | 15 | 3 | 1.09 | One very hard file, rest moderate |
-| 4 | **A** Security | 2,356 | 15 | 2 | 0.85 | Serious topic, textbook answers |
-| 5 | **E** Member + Admin tools | 4,647 | 25 | 3 | 0.65 | Most to read, least to puzzle out |
+| | Slot | Total lines | Code lines | Files | Transactions | Per 1000 code | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | **D** Orders + Fulfilment | 4,424 | 2,705 | 18 | 6 | **2.22** | Hardest to explain, least to read |
+| 2 | **B** Product Maintenance | 6,199 | 3,882 | 15 | 8 | 2.06 | Now almost as hard, and much bigger |
+| 3 | **E** Member + Admin tools | 7,267 | 4,723 | 25 | 6 | 1.48 | Most to read; the batch tools are the hard part |
+| 4 | **A** Security | 5,564 | 3,109 | 20 | 3 | 0.96 | Serious topic, mostly textbook answers |
+| 5 | **C** Cart + Checkout | 5,237 | 3,346 | 20 | 3 | 0.90 | One very hard file, rest moderate |
+
+**Code lines exclude comments and blank lines.** Total lines roughly doubled
+across the project when the commenting pass went in, and counting those would
+say the work had grown when only the explanations had. Read the *code lines*
+column for "how much is there"; the total is there so the two are not confused.
 
 A database transaction is the clearest marker of code that has to reason about
 *two things happening at once* — the part students find hardest to defend. So
-"transactions per 1000 lines" is a rough measure of how much of a slot is
+"transactions per 1000 code lines" is a rough measure of how much of a slot is
 genuinely difficult rather than long.
 
-**Notice that D and E are opposites.** D is the smallest slot and the hardest;
-E is the biggest and the most straightforward. Choosing by file count would
+### What moved since the first version of this table
+
+**B has nearly caught D.** Specifications can now belong to *several* categories
+(`spec_attribute_categories`), which turns a single column into a many-to-many
+relation, and `lib/product_photo.php` alone holds five transactions. B is now
+the slot with the **most** transactions of any.
+
+**E rose from last to third.** Nothing was added to it — the metric was
+previously counting `db_begin()` only, and missed the `beginTransaction()` calls
+in `lib/stock.php` and `lib/batch.php`. The old number was wrong, not stale.
+
+**C fell to last** on this measure, which undersells it: its difficulty is
+concentrated in `checkout.php` and the variant-aware cart rather than spread
+about. See the note under C below.
+
+**D and E are still opposites.** D is the smallest slot and the hardest; E is
+the biggest and the most straightforward per line. Choosing by file count would
 get this exactly backwards.
 
 ---
 
 ## What actually makes each one hard
 
-### 1. Slot D — Orders + Fulfilment  ★★★★★
+### Slot D — Orders + Fulfilment  ★★★★★  *(hardest)*
 
 Smallest slot, and almost none of it is ordinary CRUD. Six of its functions go
 beyond the brief's list — the most of any slot — which means six things with
@@ -73,28 +93,57 @@ You will have to explain, in your own words:
 Nothing here can be revised from a tutorial. **Take it if you want the hardest
 material and the least reading.**
 
-### 2. Slot B — Product Maintenance  ★★★★☆
+### Slot B — Product Maintenance  ★★★★☆  *(second)*
 
-`lib/spec.php` is 1,228 lines — the largest single file in the project — and
+`lib/spec.php` is 1,526 lines — the largest single file in the project — and
 it implements **EAV** (entity-attribute-value). You will be asked why the
 specifications are not simply columns on `products`, and "it's more flexible"
 is not a sufficient answer; you need the cost side too (specs become a join,
 and the database can no longer type-check the values).
 
-Also carries GD image processing and the configurator that lets a customer's
-choice change the price.
+On top of EAV, a spec may now belong to **several categories at once** — Storage
+applies to Smartphones *and* Tablets but not to cables. That is a second
+many-to-many relation (`spec_attribute_categories`) layered on the first, and it
+brings two questions worth rehearsing:
 
-### 3. Slot C — Cart + Checkout  ★★★☆☆
+- **why a link table rather than a second `category_id` column.** The honest
+  answer is that the alternatives were both wrong: defining Storage once per
+  category produces two attributes that merely share a name, so a phone and a
+  tablet can never appear on one comparison row; making it global hangs a
+  Storage field on every cable in the shop.
+- **why "no rows" means "every category".** The absence of a restriction is the
+  restriction being absent. Warranty has no links and therefore reaches
+  everything, which is exactly what `category_id IS NULL` used to mean.
+
+It also has the subtlest bug in the project's history, which is worth being able
+to tell as a story: the duplicate-name rule had to change from *unique within a
+category* to *no overlap between category sets*, because two specs called
+Storage are fine when one covers phones and the other covers cables — they never
+meet — but not when both cover phones.
+
+Also carries GD image processing, the configurator that lets a customer's choice
+change the price, and the five transactions in `lib/product_photo.php`.
+
+> **Ranks 3, 4 and 5 — E, A and C — are close enough to be noise.** D and B are
+> clearly the two hardest; below them the measure separates slots by less than
+> it separates people. Read all three descriptions and pick on the *kind* of
+> work, not the position.
+
+### Slot C — Cart + Checkout  ★★★☆☆
 
 Unusual shape: **one genuinely hard file surrounded by easy ones.**
 `checkout_success.php` is the most consequential code in the project — money
 and stock both move — and it is the only slot using `SELECT ... FOR UPDATE`
 (row locking, so two tabs cannot spend the same stock).
 
+Its position at the bottom of the table undersells it: the metric rewards
+difficulty *spread thinly*, and C's is concentrated. One hard file still has to
+be defended in the viva.
+
 The rest — listings, filtering, the cart — is comfortable. Take it if you want
 one hard thing to master properly rather than many medium ones.
 
-### 4. Slot A — Security + Authorisation  ★★★☆☆
+### Slot A — Security + Authorisation  ★★★☆☆
 
 Feels intimidating and is the most *learnable*, because every concept is
 standard and heavily documented: password hashing, CSRF, session fixation,
@@ -108,16 +157,20 @@ The one question you must have a real answer to: **why permissions rather than
 role-name checks?** (Because a role name changes and a permission does not; and
 because adding a role must not mean editing every page.)
 
-### 5. Slot E — Member + Profile + Admin tools  ★★☆☆☆
+### Slot E — Member + Profile + Admin tools  ★★★☆☆
 
 The most files and the most lines, but mostly the **same patterns repeated**:
 list, form, validate, save. Once you understand one CRUD screen you understand
 seven.
 
-The one hard piece is `lib/batch.php` (1,052 lines): the preview-then-commit
+The one hard piece is `lib/batch.php` (1,051 lines): the preview-then-commit
 flow with one-use tokens, and optimistic concurrency control in the price
 updater — "what if somebody edited a price between the preview and the
-confirm?"
+confirm?" `lib/stock.php` carries three more transactions.
+
+Those six transactions are why E sits third rather than last. They are real, but
+they live in two files out of twenty-five — so the *slot* is not hard, two files
+in it are. Read those two properly and the rest is CRUD.
 
 **Take it if you want steady, predictable work.** Be honest that there is a lot
 of it — this is volume, not difficulty.
@@ -171,17 +224,50 @@ lib/auth.php  lib/role.php  lib/security.php  lib/login_guard.php  lib/remember.
 | Block + Unblock User Account | yes | `admin/members.php` — *shared with E, agree who claims it* |
 | CAPTCHA Integration (3rd-party) | yes | `lib/captcha.php` |
 | Remember Me (Retain Login Session) | yes | `lib/remember.php` |
-| User Email Verification (Email) | yes | `verify.php` |
 | **Role + Permission Management** | **no — extra** | `lib/role.php`, `admin/roles.php` |
 | **Per-transition authorisation** | **no — extra** | built on this slot's `can()`, demoed by D |
 | **CSRF protection on every POST** | **no — extra** | `lib/security.php` |
 | **Post/Redirect/Get on 21 forms** | **no — extra** | `lib/prg.php` |
+| **Email domain (MX) validation** | **no — extra** | `lib/validation.php` |
+| User Email Verification (Email) | yes | `lib/verification.php`, `verify_email.php` |
+| **One-time code (OTP) as well as a link** | **no — extra** | `lib/verification.php` |
+| **Live "is this address available" check** | **no — extra** | `api/check_email.php` |
+| **Config completeness check at startup** | **no — extra** | `lib/init.php` |
 
 ### Still open — pick from here
 - SMS Integration (security code on login)
 - Two-factor authentication by email code
 - Session timeout with a warning countdown
 - Login history visible to the member ("last signed in from…")
+
+### Three design decisions worth being able to defend
+
+These are small in code and disproportionately good viva material, because each
+one is a case where the *obvious* implementation is wrong.
+
+**The CAPTCHA fails closed.** When Google cannot be reached, the check returns
+false and the signup is refused. It used to return true, on the reasoning that
+failing closed would lock everyone out — which has the logic backwards: the one
+condition an attacker most benefits from, the check not running, was also the
+condition under which the check waved everything through. The lockout worry is
+real but belongs to configuration: `CAPTCHA_DRIVER = 'image'` is fully local and
+needs no internet. *Say this if you are asked to name a security trade-off you
+got wrong and corrected.*
+
+**A misconfigured driver is refused too, not skipped.** A placeholder key, or
+the image driver with `gregwar/captcha` missing, used to pass silently — and
+`/vendor/` is in `.gitignore`, so a fresh clone would have disabled the CAPTCHA
+on the marker's machine while the form still looked protected. A broken security
+control should look broken.
+
+**The welcome email is sent after the response.** `redirect_then()` in
+`lib/helpers.php` sends the 302, closes the connection, then talks to Gmail —
+about 76% of the old registration wait was the SMTP conversation, happening
+*after* the account already existed and the user was already logged in. The part
+worth explaining is `session_write_close()`: PHP holds an exclusive lock on the
+session file for the whole script, so without releasing it first the browser
+follows the redirect and then the *next* request blocks on that lock for exactly
+as long as before. The fix would have looked like it did nothing.
 
 ### The strongest thing to demo
 `AUTHORIZATION_TESTING.md` — console snippets that bypass the interface entirely
@@ -216,6 +302,7 @@ lib/product_photo.php  lib/image.php  lib/video.php  lib/spec.php
 | Image Processing (Flip, Rotate) | yes | `admin/photo_edit.php` |
 | Product Video Integration (YouTube) | yes | `lib/video.php` |
 | **Product specifications (EAV)** | **no — extra** | `lib/spec.php` |
+| **One spec across several categories** | **no — extra** | `spec_attribute_categories`, migration 34 |
 | **Customer-selectable variants** | **no — extra** | `admin/product_options.php` |
 | **Apple-style configurator** | **no — extra** | `product_detail.php` |
 | **Nameable product photos** | **no — extra** | `admin/product_photos.php` |
@@ -266,6 +353,8 @@ lib/cart.php  lib/voucher.php  lib/points.php  lib/store.php
 | **Variant-aware cart lines** | **no — extra** | `lib/cart.php` |
 | **Live search suggestions** | **no — extra** | `api/search_suggest.php` |
 | Remember User Preference (dark theme) | yes | `lib/theme.php` |
+| **Theme switch without losing the page** | **no — extra** | `api/set_theme.php`, `assets/js/main.js` |
+| **Mobile transition animations** | **no — extra** | `assets/css/style.css` |
 
 ### Still open — pick from here
 - Recently viewed products
@@ -297,6 +386,7 @@ lib/orders.php  lib/cancellation.php  lib/receipt.php  lib/qrcode.php  lib/addre
 | E-Receipt (Email or PDF) | yes | `lib/receipt.php` |
 | **Receipt names the payment method** | **no — extra** | `includes/receipt_template.php` |
 | Shipping Address Handling | yes | `lib/address.php` |
+| **Cascading state / city / postcode** | **no — extra** | `lib/postcode.php`, `api/address_lookup.php` |
 | Generate + Scan QR Code | yes | `lib/qrcode.php`, `admin/qr_scan.php` |
 | **Strict status sequence** | **no — extra** | `lib/orders.php` |
 | **Delivery evidence photos** | **no — extra** | `admin/evidence.php` |
@@ -383,13 +473,38 @@ to").
 
 ---
 
-# Two things that are nobody's module and everybody's problem
+# Things that are nobody's module and everybody's problem
 
 **The database export.** Section 7.0 requires it and it does not exist. See
-`PRE_SUBMISSION_AUDIT.md` §3.1 — the six core tables are not in any migration, so
-without the export a grader gets nothing. One person should own producing it
-**after** the sample data is in.
+`PRE_SUBMISSION_AUDIT.md` §3.1. The clearest way to see the problem: the
+migrations run from **07 to 34, and 01–06 do not exist**. Those six numbers are
+the six core tables — users, categories, products, cart, orders, order_items —
+which were created by hand and never written down. Every later migration assumes
+they are already there, so running all 28 of them against an empty database
+produces nothing but errors. Without the export a grader cannot build the schema
+at all. One person should own producing it **after** the sample data is in.
+
+**The migrations must all be run.** Twenty-nine files: 07–34 plus
+`migration_password_reset.sql`, which is unnumbered and easy to skip. A copy of
+the project with some applied and some not does not crash — every feature checks
+first, with `spec_multi_category_ready()`, `spec_options_ready()`,
+`theme_column_ready()` and so on — it just quietly lacks features. That is the
+right behaviour for development and a bad surprise on demo day, because nothing
+announces the absence. Run them all, then check the *Verify* block at the bottom
+of each file.
+
+**`lib/config.php` is in `.gitignore`,** because it holds live Stripe and Gmail
+credentials. Correct for secrets, and it means the file is **never updated by a
+pull**: add a setting in a new feature and every other copy is silently a version
+behind. `lib/init.php` now compares against the tracked `lib/config.example.php` on
+startup and lists everything missing at once — take that page seriously if you
+see it rather than pasting in one constant at a time.
 
 **The slide.** Section 5.0: cover page, ERD from phpMyAdmin, then a sub-cover and
 screenshots per member. Each person produces their own section from the pages
 listed in their slot.
+
+> The ERD screenshot will now show `spec_attribute_categories` and `postcodes`.
+> Whoever takes B and D should expect to be asked what those two tables are for
+> — they are the only pure link/reference tables in the schema, and a tutor
+> looking for database-design marks will notice them.
